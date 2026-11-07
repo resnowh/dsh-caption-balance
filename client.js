@@ -13,6 +13,9 @@
  * `display.showBalance` / `showToday` / `showPhase` choose the segments,
  * `display.smallDecimals` turns the smaller decimal run off, and a balance below
  * `display.lowBalanceThreshold` is tinted with the configured warn/danger tone.
+ *
+ * A `settings.section` page edits those switches inside the Harness settings
+ * dialog; it reads and writes the host's settings route.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-caption-balance',
@@ -21,17 +24,22 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const ROUTE = '/api/dsh-caption-balance/summary'
+    const SETTINGS_ROUTE = '/api/dsh-caption-balance/settings'
+    const SETTINGS_HEADER = 'x-dsh-caption-balance'
     const MENU_HOST = '[data-windows-menu]'
     const MENUBAR = '[role="menubar"]'
     const CAPTION_STYLE_ID = 'dsh-caption-balance-caption-style'
     const CHIP_STYLE_ID = 'dsh-caption-balance-chip-style'
+    const SETTINGS_STYLE_ID = 'dsh-caption-balance-settings-style'
     const HEADER_SLOT = 'conversation.session.header.utilities'
     const SIDEBAR_SLOT = 'sidebar.footer.action'
+    const SETTINGS_SLOT = 'settings.section'
     const MOUNT_INTERVAL_MS = 500
     const FALLBACK_DELAY_MS = 4_000
     const REFRESH_MS = 30_000
 
     const POSITIONS = new Set(['auto', 'caption', 'header', 'sidebar'])
+    const TONES = new Set(['warn', 'danger'])
 
     const captionCss = `
 button.dsh-cb {
@@ -81,7 +89,74 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
 .dsh-cb-chip .dsh-cb-low[data-tone='danger'], .dsh-cb-side .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-danger-label, #e5484d); }
 `
 
-    const currencySymbol = (currency) => (currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : '')
+    const settingsCss = `
+.dsh-cb-settings { display: flex; flex-direction: column; gap: 16px; padding: 8px 0; font-size: 13px; line-height: 22px; color: var(--dsw-alias-label-primary); }
+.dsh-cb-settings__intro { color: var(--dsw-alias-label-secondary); margin: 0; }
+.dsh-cb-settings__card { border: .5px solid var(--dsw-alias-settings-card-stroke); border-radius: var(--dsw-radius-xl); background: var(--dsw-alias-settings-card-fill); padding: 4px 16px; }
+.dsh-cb-settings__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; padding: 6px 0; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+.dsh-cb-settings__row:last-child { border-bottom: 0; }
+.dsh-cb-settings__label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dsh-cb-settings__name { font-size: 14px; }
+.dsh-cb-settings__hint { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
+.dsh-cb-settings select, .dsh-cb-settings input[type=number] { height: 32px; box-sizing: border-box; border: .5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; padding: 0 10px; min-width: 150px; }
+.dsh-cb-settings input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--dsw-alias-brand-primary); }
+.dsh-cb-settings__actions { display: flex; align-items: center; gap: 12px; }
+.dsh-cb-settings__save { height: 32px; padding: 0 14px; border-radius: var(--dsw-radius-md); border: 0; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); font: inherit; font-weight: 500; cursor: pointer; }
+.dsh-cb-settings__save:disabled { opacity: .6; cursor: default; }
+.dsh-cb-settings__status { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
+.dsh-cb-settings__status[data-tone=error] { color: var(--dsw-alias-state-error-primary); }
+`
+
+    const currencySymbol = (currency) => (currency === 'USD' ? '$' : currency === 'CNY' ? '\u00a5' : '')
+
+    /** Two-language copy for the settings page. */
+    const COPY = {
+      zh: {
+        nav: '余额显示',
+        intro: '标题栏 / 会话标题栏里的余额读数。修改后点保存，立即生效。',
+        position: '显示位置',
+        positionHint: 'auto：有标题栏菜单就放标题栏，否则放会话标题栏',
+        showBalance: '显示余额',
+        showToday: '显示今日花费',
+        showPhase: '显示峰 / 谷',
+        smallDecimals: '小数部分小一号',
+        lowThreshold: '低余额阈值',
+        lowThresholdHint: '余额低于该金额时变色，0 表示关闭',
+        lowStyle: '低余额颜色',
+        warn: '琥珀色',
+        danger: '红色',
+        save: '保存',
+        saving: '保存中…',
+        saved: '已保存',
+        failed: '保存失败',
+        loading: '读取中…',
+      },
+      en: {
+        nav: 'Balance display',
+        intro: 'The balance reading in the title bar or session header. Save applies immediately.',
+        position: 'Position',
+        positionHint: 'auto: caption menu when present, otherwise the session header',
+        showBalance: 'Show balance',
+        showToday: "Show today's spend",
+        showPhase: 'Show peak / off-peak',
+        smallDecimals: 'Smaller decimals',
+        lowThreshold: 'Low balance threshold',
+        lowThresholdHint: 'Tint below this amount; 0 disables',
+        lowStyle: 'Low balance colour',
+        warn: 'Amber',
+        danger: 'Red',
+        save: 'Save',
+        saving: 'Saving…',
+        saved: 'Saved',
+        failed: 'Save failed',
+        loading: 'Loading…',
+      },
+    }
+
+    const pageLanguage = () => (
+      String(document.documentElement?.lang ?? '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
+    )
+    const copy = () => COPY[pageLanguage()]
 
     /** Validate the display block the host shipped, so an old host still works. */
     function displayOf(data) {
@@ -95,7 +170,7 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         lowBalanceThreshold: Number.isFinite(Number(source.lowBalanceThreshold))
           ? Math.max(0, Number(source.lowBalanceThreshold))
           : 10,
-        lowBalanceStyle: source.lowBalanceStyle === 'danger' ? 'danger' : 'warn',
+        lowBalanceStyle: TONES.has(source.lowBalanceStyle) ? source.lowBalanceStyle : 'warn',
       }
     }
 
@@ -105,7 +180,7 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       if (!Number.isFinite(number)) return null
       const absolute = Math.abs(number)
       // Money keeps a fixed number of decimals so the caption never jitters
-      // between `¥59.6` and `¥59.60` as the value changes.
+      // between ¥59.6 and ¥59.60 as the value changes.
       const decimals = absolute < 0.01 ? 4 : absolute < 1 ? 3 : 2
       const text = number.toFixed(decimals)
       const dot = text.indexOf('.')
@@ -114,7 +189,7 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         : { symbol: currencySymbol(currency), integer: text.slice(0, dot), decimal: text.slice(dot) }
     }
 
-    /** `¥62.69`, with the decimal run optionally one step smaller, as HTML. */
+    /** One amount, with the decimal run optionally one step smaller, as HTML. */
     function amountMarkup(currency, value, smallDecimals) {
       const parts = splitMoney(currency, value)
       if (parts === null) return '—'
@@ -338,7 +413,7 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       return { refresh, subscribe, get: () => state }
     }
 
-    // The poller is created per apply and read by the slot components.
+    // The poller is created per apply and read by the components below.
     let poller = null
     const pollerSnapshot = () => (poller === null ? { data: null, error: null } : poller.get())
 
@@ -356,6 +431,37 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       style.id = id
       style.textContent = css
       parent.appendChild(style)
+    }
+
+    /** Read the settings route; resolves to the display block plus defaults. */
+    async function fetchSettings() {
+      const response = await fetch(SETTINGS_ROUTE, {
+        credentials: 'same-origin',
+        headers: { accept: 'application/json' },
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const payload = await response.json()
+      if (payload?.ok !== true) throw new Error(payload?.error ?? 'bad payload')
+      return payload
+    }
+
+    /** Persist the display block through the settings route. */
+    async function saveSettings(display) {
+      const response = await fetch(SETTINGS_ROUTE, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          [SETTINGS_HEADER]: '1',
+        },
+        body: JSON.stringify({ display }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || payload?.ok !== true) {
+        throw new Error(payload?.error ?? `HTTP ${response.status}`)
+      }
+      return payload
     }
 
     /** Header chip, used when the caption menu is not the chosen target. */
@@ -441,6 +547,149 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       )
     }
 
+    /** One labelled row in the settings form. */
+    function Row(props) {
+      return h(
+        'div',
+        { className: 'dsh-cb-settings__row' },
+        h(
+          'div',
+          { className: 'dsh-cb-settings__label' },
+          h('span', { className: 'dsh-cb-settings__name' }, props.name),
+          props.hint === undefined ? null : h('span', { className: 'dsh-cb-settings__hint' }, props.hint),
+        ),
+        props.children,
+      )
+    }
+
+    function Toggle(props) {
+      return h('input', {
+        type: 'checkbox',
+        checked: props.checked,
+        onChange: (event) => props.onChange(event.target.checked),
+        'aria-label': props.name,
+      })
+    }
+
+    /** Settings page contributed to the Harness settings dialog. */
+    function SettingsSection() {
+      const text = copy()
+      const [draft, setDraft] = React.useState(null)
+      const [status, setStatus] = React.useState('loading')
+      const [error, setError] = React.useState(null)
+
+      React.useEffect(() => {
+        let live = true
+        fetchSettings()
+          .then((payload) => {
+            if (!live) return
+            setDraft(displayOf(payload))
+            setStatus('ready')
+          })
+          .catch((cause) => {
+            if (!live) return
+            setDraft(displayOf(null))
+            setStatus('ready')
+            setError(String(cause?.message ?? cause))
+          })
+        return () => {
+          live = false
+        }
+      }, [])
+
+      const update = (patch) => setDraft((current) => ({ ...(current ?? displayOf(null)), ...patch }))
+
+      const save = () => {
+        if (draft === null) return
+        setStatus('saving')
+        setError(null)
+        saveSettings(draft)
+          .then((payload) => {
+            setDraft(displayOf(payload))
+            setStatus('saved')
+            // Repaint the mounted widget right away instead of waiting for its poll.
+            poller?.refresh(false)
+          })
+          .catch((cause) => {
+            setStatus('ready')
+            setError(String(cause?.message ?? cause))
+          })
+      }
+
+      if (draft === null) return h('div', { className: 'dsh-cb-settings' }, h('p', { className: 'dsh-cb-settings__intro' }, text.loading))
+
+      const positionOptions = [
+        ['auto', 'auto'],
+        ['caption', 'caption'],
+        ['header', 'header'],
+        ['sidebar', 'sidebar'],
+      ]
+
+      return h(
+        'div',
+        { className: 'dsh-cb-settings' },
+        h('p', { className: 'dsh-cb-settings__intro' }, text.intro),
+        h(
+          'div',
+          { className: 'dsh-cb-settings__card' },
+          h(
+            Row,
+            { name: text.position, hint: text.positionHint },
+            h(
+              'select',
+              {
+                value: draft.position,
+                onChange: (event) => update({ position: event.target.value }),
+                'aria-label': text.position,
+              },
+              positionOptions.map(([value, label]) => h('option', { value, key: value }, label)),
+            ),
+          ),
+          h(Row, { name: text.showBalance }, h(Toggle, { name: text.showBalance, checked: draft.showBalance, onChange: (value) => update({ showBalance: value }) })),
+          h(Row, { name: text.showToday }, h(Toggle, { name: text.showToday, checked: draft.showToday, onChange: (value) => update({ showToday: value }) })),
+          h(Row, { name: text.showPhase }, h(Toggle, { name: text.showPhase, checked: draft.showPhase, onChange: (value) => update({ showPhase: value }) })),
+          h(Row, { name: text.smallDecimals }, h(Toggle, { name: text.smallDecimals, checked: draft.smallDecimals, onChange: (value) => update({ smallDecimals: value }) })),
+          h(
+            Row,
+            { name: text.lowThreshold, hint: text.lowThresholdHint },
+            h('input', {
+              type: 'number',
+              min: 0,
+              step: 1,
+              value: String(draft.lowBalanceThreshold),
+              onChange: (event) => update({ lowBalanceThreshold: Math.max(0, Number(event.target.value) || 0) }),
+              'aria-label': text.lowThreshold,
+            }),
+          ),
+          h(
+            Row,
+            { name: text.lowStyle },
+            h(
+              'select',
+              {
+                value: draft.lowBalanceStyle,
+                onChange: (event) => update({ lowBalanceStyle: event.target.value }),
+                'aria-label': text.lowStyle,
+              },
+              h('option', { value: 'warn' }, text.warn),
+              h('option', { value: 'danger' }, text.danger),
+            ),
+          ),
+        ),
+        h(
+          'div',
+          { className: 'dsh-cb-settings__actions' },
+          h(
+            'button',
+            { type: 'button', className: 'dsh-cb-settings__save', onClick: save, disabled: status === 'saving' },
+            status === 'saving' ? text.saving : text.save,
+          ),
+          status === 'saved' ? h('span', { className: 'dsh-cb-settings__status' }, text.saved) : null,
+          error === null ? null : h('span', { className: 'dsh-cb-settings__status', 'data-tone': 'error' }, `${text.failed}: ${error}`),
+        ),
+      )
+    }
+
     function apply(ctx) {
       ctx.effect(() => {
         poller = createPoller()
@@ -451,6 +700,28 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         let fallbackTimer = 0
         let refreshTimer = 0
         let registered = false
+
+        // The settings page is independent of the render target, so it is
+        // registered up front and appears in the settings dialog's navigation.
+        ensureStyle(SETTINGS_STYLE_ID, settingsCss, document.head)
+        try {
+          ctx.slots.inject(
+            SETTINGS_SLOT,
+            () =>
+              ctx.slots.register(
+                {
+                  name: SETTINGS_SLOT,
+                  id: 'dsh-caption-balance',
+                  order: 60,
+                  label: () => copy().nav,
+                },
+                SettingsSection,
+              ),
+            'dsh-caption-balance: settings section',
+          )
+        } catch (error) {
+          ctx?.logger?.warn?.(`[dsh-caption-balance] settings section unavailable: ${error?.message ?? error}`)
+        }
 
         const registerSlot = (name, component) => {
           if (registered) return
@@ -527,6 +798,7 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
           if (captionButton !== null) captionButton.remove()
           captionButton = null
           document.getElementById(CHIP_STYLE_ID)?.remove()
+          document.getElementById(SETTINGS_STYLE_ID)?.remove()
           poller = null
         }
       }, 'dsh-caption-balance: mount')

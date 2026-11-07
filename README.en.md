@@ -97,6 +97,17 @@ low balance is highlighted:
 If all three `show` flags are off, the balance is kept so the widget never
 renders empty. Reload the page (`Ctrl+Shift+R`) after changing the config.
 
+### From the settings dialog
+
+Open **Settings → Balance display** in Harness to switch the position, the
+segments, the decimal style, the low-balance threshold and colour. Saving
+applies immediately — no YAML edit, no restart.
+
+- The page writes **user overrides** to
+  `~/.dsh/plugin-data/dsh-caption-balance/settings.json`, which win over the
+  profile defaults
+- To go back to the defaults, set the values back or delete that file
+
 ## How it works
 
 - The host half registers one exact route, `GET /api/dsh-caption-balance/summary`,

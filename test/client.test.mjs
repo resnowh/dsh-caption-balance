@@ -155,9 +155,15 @@ function mount(ctxSlots, overrides = {}, domOptions = { captionBar: false }) {
     },
     slots: {
       inject: (name, factory) => {
-        injected.push({ name, component: factory() })
+        const entry = { name, component: undefined }
+        injected.push(entry)
+        entry.component = factory()
       },
-      register: (descriptor, component) => component,
+      register: (descriptor, component) => {
+        const entry = injected[injected.length - 1]
+        if (entry !== undefined) entry.descriptor = descriptor
+        return component
+      },
       ...ctxSlots,
     },
   }
@@ -183,30 +189,28 @@ test('auto position mounts the caption button when the caption menu exists', asy
 test('auto position falls back to the header chip without a caption menu', async () => {
   const { injected, timeouts, cleanup } = mount({}, {}, { captionBar: false })
   await flush()
-  assert.equal(injected.length, 0, 'nothing is registered before the fallback delay')
+  assert.equal(injected.some((entry) => entry.name === 'conversation.session.header.utilities'), false, 'no header chip before the fallback delay')
 
   const fallback = timeouts.find((fn) => fn !== null)
   assert.equal(typeof fallback, 'function')
   fallback()
 
-  assert.equal(injected.length, 1)
-  assert.equal(injected[0].name, 'conversation.session.header.utilities')
-  assert.equal(typeof injected[0].component, 'function')
+  const headerEntry = injected.find((entry) => entry.name === 'conversation.session.header.utilities')
+  assert.notEqual(headerEntry, undefined)
+  assert.equal(typeof headerEntry.component, 'function')
   cleanup()
 })
 
 test('position: header registers the header chip immediately', async () => {
   const { injected } = mount({}, { display: { position: 'header' } })
   await flush()
-  assert.equal(injected.length, 1)
-  assert.equal(injected[0].name, 'conversation.session.header.utilities')
+  assert.equal(injected.some((entry) => entry.name === 'conversation.session.header.utilities'), true)
 })
 
 test('position: sidebar registers the sidebar footer row', async () => {
   const { injected } = mount({}, { display: { position: 'sidebar' } })
   await flush()
-  assert.equal(injected.length, 1)
-  assert.equal(injected[0].name, 'sidebar.footer.action')
+  assert.equal(injected.some((entry) => entry.name === 'sidebar.footer.action'), true)
 })
 
 test('low balance tints the balance segment with the configured tone', async () => {
@@ -235,4 +239,13 @@ test('danger tone is honoured and hidden segments disappear', async () => {
   assert.equal(caption.innerHTML.includes('data-tone="danger"'), true)
   assert.equal(caption.innerHTML.includes('dsh-cb-sep'), false)
   assert.equal(caption.innerHTML.includes('dsh-cb-phase'), false)
+})
+test('registers a settings section independent of the render target', async () => {
+  const { injected, cleanup } = mount({}, { display: { position: 'sidebar' } })
+  await flush()
+  const section = injected.find((entry) => entry.name === 'settings.section')
+  assert.notEqual(section, undefined, 'settings page is contributed')
+  assert.equal(section.descriptor.id, 'dsh-caption-balance')
+  assert.equal(typeof section.descriptor.label, 'function')
+  cleanup()
 })

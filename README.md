@@ -87,6 +87,13 @@ dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
 
 三个 `show` 开关全关时会自动保留余额，避免出现空控件。改完配置刷新页面（`Ctrl+Shift+R`）即可生效。
 
+### 在设置里改
+
+打开 Harness 的**设置 → 余额显示**，可以直接切换位置、各段显示、小数样式、低余额阈值与颜色，点保存立即生效，不需要改 YAML、也不用重启。
+
+- 设置页写入的是**用户覆盖**，保存在 `~/.dsh/plugin-data/dsh-caption-balance/settings.json`，优先于 profile 里的默认值
+- 想回到默认值：把各项改回原值保存，或删除上面那个文件
+
 ## 工作原理
 
 - 宿主半边在 Harness 的 web server 上提供精确路由 `GET /api/dsh-caption-balance/summary`，只接受本机回环、同源、非跨站的请求
