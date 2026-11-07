@@ -91,7 +91,7 @@ function createDom({ captionBar }) {
       documentListeners.delete(name)
     },
     visibilityState: 'visible',
-    getElementById: () => null,
+    getElementById: (id) => document.head.children.find((child) => child.id === id) ?? null,
     head: makeElement('head'),
   }
 
@@ -177,7 +177,13 @@ test('falls back to the conversation header when no caption menu exists', async 
   assert.equal(injected[0].name, 'conversation.session.header.utilities')
   assert.equal(typeof injected[0].component, 'function')
 
+  // The chip must get its stylesheet, otherwise it renders as a bare button.
+  const style = dom.document.head.children.find((child) => child.id === 'dsh-caption-balance-chip-style')
+  assert.notEqual(style, undefined, 'fallback stylesheet is injected')
+  assert.equal(style.textContent.includes('.dsh-cb-chip'), true)
+
   cleanup()
+  assert.equal(dom.document.head.children.some((child) => child.id === 'dsh-caption-balance-chip-style'), false)
 })
 
 test('appends one button after the caption menu entries when the menu exists', async () => {
