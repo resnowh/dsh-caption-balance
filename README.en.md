@@ -1,5 +1,7 @@
 # dsh-caption-balance
 
+![test](https://github.com/resnowh/dsh-caption-balance/actions/workflows/test.yml/badge.svg)
+
 A one-line account balance strip for the **DeepSeek Harness desktop title bar**,
 sitting right after the `应用 / 编辑` caption menu:
 

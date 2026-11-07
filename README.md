@@ -1,5 +1,7 @@
 # dsh-caption-balance
 
+![test](https://github.com/resnowh/dsh-caption-balance/actions/workflows/test.yml/badge.svg)
+
 [English](README.en.md) | 中文
 
 在 DeepSeek Harness **桌面端标题栏**（`应用 / 编辑` 菜单右边）显示一行实时读数：
