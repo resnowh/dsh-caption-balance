@@ -1,0 +1,60 @@
+{
+  "name": "dsh-caption-balance",
+  "version": "0.1.0",
+  "description": "在 DeepSeek Harness 桌面端标题栏（应用/编辑 菜单旁）显示账号余额、今日花费与峰谷时段",
+  "type": "module",
+  "license": "MIT",
+  "author": "resnowh",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "balance",
+    "usage",
+    "cost",
+    "titlebar"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/resnowh/dsh-caption-balance.git"
+  },
+  "bugs": {
+    "url": "https://github.com/resnowh/dsh-caption-balance/issues"
+  },
+  "homepage": "https://github.com/resnowh/dsh-caption-balance#readme",
+  "engines": {
+    "dsh": ">=0.2.2-rc.1 <0.3.0-0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "index.js",
+    "client.js",
+    "lib",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "meta": {
+    "title": "标题栏余额",
+    "description": "在桌面端标题栏显示账号余额、今日与本月花费"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}
