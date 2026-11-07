@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { DEFAULTS, normalizeConfig } from '../lib/config.js'
+import { DEFAULTS, VERSION, normalizeConfig } from '../lib/config.js'
+import pkg from '../package.json' with { type: 'json' }
 
 test('normalizeConfig applies defaults for an empty row', () => {
   const config = normalizeConfig(undefined)
@@ -32,4 +33,8 @@ test('normalizeConfig clamps unsafe values instead of trusting them', () => {
   assert.deepEqual(config.models['my-model'], { cacheHit: 0, cacheMiss: 2, output: 3 })
   assert.deepEqual(config.aliases, { 'alias-model': 'my-model' })
   assert.equal(Object.isFrozen(config), true)
+})
+
+test('VERSION matches the package version', () => {
+  assert.equal(VERSION, pkg.version)
 })
