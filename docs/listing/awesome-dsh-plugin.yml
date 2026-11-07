@@ -1,0 +1,14 @@
+# awesome-dsh-plugin listing draft.
+#
+# The repository must be at least one day old and have at least ten commits
+# before the maintainers accept a pull request, so this file is prepared but not
+# submitted yet. When the threshold is met:
+#   1. copy this file to data/plugins/resnowh__dsh-caption-balance.yml
+#   2. run `npm ci && node scripts/generate-readme.mjs`
+#   3. open one pull request with the yml and the regenerated READMEs
+url: https://github.com/resnowh/dsh-caption-balance
+name: resnowh/dsh-caption-balance
+category: usage
+description:
+  en: Shows the account balance, today's spend and the current peak or off-peak pricing window in the DeepSeek Harness desktop title bar.
+  zh: 在 DeepSeek Harness 桌面端标题栏显示账号余额、今日花费与当前峰谷计价时段。
