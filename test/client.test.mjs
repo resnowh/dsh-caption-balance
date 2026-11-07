@@ -91,6 +91,7 @@ function createDom({ captionBar }) {
       documentListeners.delete(name)
     },
     visibilityState: 'visible',
+    getElementById: () => null,
     head: makeElement('head'),
   }
 

@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
     const MENU_HOST = '[data-windows-menu]'
     const MENUBAR = '[role="menubar"]'
     const CAPTION_STYLE_ID = 'dsh-caption-balance-caption-style'
+    const FALLBACK_STYLE_ID = 'dsh-caption-balance-chip-style'
     const FALLBACK_SLOT = 'conversation.session.header.utilities'
     const MOUNT_INTERVAL_MS = 500
     const FALLBACK_DELAY_MS = 4_000
@@ -253,6 +254,15 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
       return bar === null ? null : { root: host.shadowRoot, bar }
     }
 
+    /** Inject the header-chip stylesheet into the document once. */
+    function ensureFallbackStyle() {
+      if (document.getElementById(FALLBACK_STYLE_ID) !== null) return
+      const style = document.createElement('style')
+      style.id = FALLBACK_STYLE_ID
+      style.textContent = fallbackCss
+      document.head.appendChild(style)
+    }
+
     function ensureCaptionStyle(root) {
       if (root.getElementById(CAPTION_STYLE_ID) !== null) return
       const style = document.createElement('style')
@@ -332,6 +342,7 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
           if (disposed || captionButton !== null || fallbackRegistered) return
           window.clearInterval(mountTimer)
           fallbackRegistered = true
+          ensureFallbackStyle()
           try {
             ctx.slots.inject(
               FALLBACK_SLOT,
@@ -365,6 +376,7 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
           if (captionButton !== null) captionButton.remove()
           captionButton = null
           poller = null
+          document.getElementById(FALLBACK_STYLE_ID)?.remove()
         }
       }, 'dsh-caption-balance: mount')
     }
