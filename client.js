@@ -1,26 +1,34 @@
 /**
  * Client half of dsh-caption-balance.
  *
- * DSH renders the Windows caption menu itself: the desktop preload injects a
- * fixed `[data-windows-menu]` host with an open shadow root holding a
- * `[role=menubar]` and its 应用 / 编辑 buttons. This module appends one more
- * button to that menubar, so the reading sits right after 编辑 and inherits the
- * caption's own button styling. Data comes from the plugin's host route.
+ * Two render targets, one data source:
  *
- * On platforms without a caption menu (macOS, `dsh web`) the mount waits
- * forever and nothing is rendered; the host route is harmless there.
+ * 1. Windows desktop — DSH's caption menu is injected by the desktop preload as
+ *    a `[data-windows-menu]` host with an open shadow root holding a
+ *    `[role=menubar]`. One more button is appended there, right after 编辑, and
+ *    inherits the caption's own button styling.
+ * 2. Anything without that menu (macOS desktop, `dsh web`) — the widget falls
+ *    back to the conversation header's utilities slot, which is where the
+ *    session title bar keeps its inline chips.
+ *
+ * Both read the same host route and share one poller.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-caption-balance',
-  factory: () => {
+  factory: (require) => {
+    const React = require('react')
+    const h = React.createElement
+
     const ROUTE = '/api/dsh-caption-balance/summary'
     const MENU_HOST = '[data-windows-menu]'
     const MENUBAR = '[role="menubar"]'
-    const STYLE_ID = 'dsh-caption-balance-style'
+    const CAPTION_STYLE_ID = 'dsh-caption-balance-caption-style'
+    const FALLBACK_SLOT = 'conversation.session.header.utilities'
     const MOUNT_INTERVAL_MS = 500
-    const REFRESH_FALLBACK_MS = 30_000
+    const FALLBACK_DELAY_MS = 4_000
+    const REFRESH_MS = 30_000
 
-    const css = `
+    const captionCss = `
 button.dsh-cb {
   display: inline-flex; align-items: baseline;
   height: 28px; line-height: 28px;
@@ -30,7 +38,23 @@ button.dsh-cb .dsh-cb-dec { font-size: 0.82em; opacity: 0.8; }
 button.dsh-cb .dsh-cb-sep { margin: 0 4px; opacity: 0.45; }
 button.dsh-cb .dsh-cb-phase { margin-left: 6px; font-size: 12px; line-height: inherit; color: var(--dsw-alias-label-tertiary); }
 button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-warn-label, #d9a441); }
-button.dsh-cb[data-busy='true'] { opacity: 0.6; }
+`
+
+    const fallbackCss = `
+.dsh-cb-chip {
+  display: inline-flex; align-items: baseline; flex: none;
+  height: 28px; box-sizing: border-box; padding: 0 8px;
+  margin: 0; border: 0; border-radius: var(--dsw-radius-md, 8px);
+  background: transparent; color: var(--dsw-alias-label-tertiary, inherit);
+  font-family: inherit; font-size: 13px; line-height: 28px;
+  white-space: nowrap; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.dsh-cb-chip:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.14)); }
+.dsh-cb-chip:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe); outline-offset: -2px; }
+.dsh-cb-chip .dsh-cb-dec { font-size: 0.82em; opacity: 0.8; }
+.dsh-cb-chip .dsh-cb-sep { margin: 0 4px; opacity: 0.45; }
+.dsh-cb-chip .dsh-cb-phase { margin-left: 6px; font-size: 12px; color: var(--dsw-alias-label-tertiary, inherit); }
+.dsh-cb-chip .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-warn-label, #d9a441); }
 `
 
     const currencySymbol = (currency) => (currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : '')
@@ -50,7 +74,7 @@ button.dsh-cb[data-busy='true'] { opacity: 0.6; }
         : { symbol: currencySymbol(currency), integer: text.slice(0, dot), decimal: text.slice(dot) }
     }
 
-    /** `¥62.69` with the decimals one step smaller. */
+    /** `¥62.69` with the decimals one step smaller, as HTML markup. */
     function amountMarkup(currency, value) {
       const parts = splitMoney(currency, value)
       if (parts === null) return '—'
@@ -58,7 +82,20 @@ button.dsh-cb[data-busy='true'] { opacity: 0.6; }
       return `${parts.symbol}${parts.integer}<span class="dsh-cb-dec">${parts.decimal}</span>`
     }
 
-    /** Plain-text variant for the tooltip and aria label. */
+    /** The same amount as React nodes, for the header chip. */
+    function amountNodes(currency, value, key) {
+      const parts = splitMoney(currency, value)
+      if (parts === null) return h('span', { key }, '—')
+      if (parts.decimal.length === 0) return h('span', { key }, `${parts.symbol}${parts.integer}`)
+      return h(
+        'span',
+        { key },
+        h('span', { key: 'i' }, `${parts.symbol}${parts.integer}`),
+        h('span', { className: 'dsh-cb-dec', key: 'd' }, parts.decimal),
+      )
+    }
+
+    /** Plain-text variant for tooltips and aria labels. */
     function amountText(currency, value) {
       const parts = splitMoney(currency, value)
       return parts === null ? '—' : `${parts.symbol}${parts.integer}${parts.decimal}`
@@ -101,6 +138,19 @@ button.dsh-cb[data-busy='true'] { opacity: 0.6; }
         .join('')
     }
 
+    function walletNodes(balance, currency) {
+      if (balance === null || balance === undefined) return [h('span', { key: 'x' }, '…')]
+      if (balance.status !== 'ready') return [h('span', { key: 'x' }, walletSummary(balance, currency))]
+      const wallets = Array.isArray(balance.wallets) ? balance.wallets : []
+      if (wallets.length === 0) return [h('span', { key: 'x' }, '—')]
+      const nodes = []
+      wallets.forEach((wallet, index) => {
+        if (index > 0) nodes.push(h('span', { key: `sep-${index}` }, ' / '))
+        nodes.push(amountNodes(wallet.currency ?? currency, wallet.balance, `w-${index}`))
+      })
+      return nodes
+    }
+
     function bonusText(balance, currency) {
       const wallets = balance !== null && balance !== undefined && balance.status === 'ready'
         && Array.isArray(balance.bonusWallets) ? balance.bonusWallets : []
@@ -130,15 +180,20 @@ button.dsh-cb[data-busy='true'] { opacity: 0.6; }
       return rows.join('\n')
     }
 
-    /** Fill one caption button with the latest state. */
-    function paint(button, data, error) {
+    function ariaLabel(data, error) {
+      if (error !== null) return '余额读取失败'
+      const currency = data?.pricing?.currency ?? 'CNY'
+      return `余额 ${walletSummary(data?.balance, currency)}，今日花费 ${data?.today ? amountText(currency, data.today.cost) : '…'}`
+    }
+
+    /** Fill one caption button (DOM) with the latest state. */
+    function paintCaption(button, data, error) {
+      if (button === null) return
       const currency = data?.pricing?.currency ?? 'CNY'
       const loading = data === null && error === null
-      const balance = error !== null ? '—' : loading ? '…' : walletMarkup(data.balance, currency)
-      const cost = error !== null ? '—' : loading ? '…' : amountMarkup(currency, data?.today?.cost)
-      const phase = error !== null || loading || data?.window === undefined || data?.window === null
-        ? null
-        : data.window.phase
+      const balance = error !== null && data === null ? '—' : loading ? '…' : walletMarkup(data.balance, currency)
+      const cost = error !== null && data === null ? '—' : loading ? '…' : amountMarkup(currency, data?.today?.cost)
+      const phase = data?.window?.phase ?? null
 
       button.innerHTML =
         `<span class="dsh-cb-amount">${balance}</span>` +
@@ -147,11 +202,47 @@ button.dsh-cb[data-busy='true'] { opacity: 0.6; }
         (phase === null
           ? ''
           : `<span class="dsh-cb-phase" data-peak="${phase === 'peak'}">${phase === 'peak' ? '峰' : '谷'}</span>`)
-
       button.title = tooltip(data, error)
-      const balanceLabel = error !== null ? '读取失败' : walletSummary(data?.balance, currency)
-      const costLabel = error !== null ? '读取失败' : loading ? '…' : amountText(currency, data?.today?.cost)
-      button.setAttribute('aria-label', `余额 ${balanceLabel}，今日花费 ${costLabel}`)
+      button.setAttribute('aria-label', ariaLabel(data, error))
+    }
+
+    /** Shared poller: one request loop, any number of render targets. */
+    function createPoller() {
+      let state = { data: null, error: null }
+      const listeners = new Set()
+
+      const emit = () => {
+        for (const listener of listeners) {
+          try {
+            listener(state)
+          } catch {
+            // One broken subscriber must not stop the others.
+          }
+        }
+      }
+
+      const refresh = async (force) => {
+        try {
+          const response = await fetch(`${ROUTE}${force === true ? '?force=1' : ''}`, {
+            credentials: 'same-origin',
+            headers: { accept: 'application/json' },
+          })
+          if (!response.ok) throw new Error(`HTTP ${response.status}`)
+          const payload = await response.json()
+          if (payload?.ok !== true) throw new Error(payload?.error ?? 'bad payload')
+          state = { data: payload, error: null }
+        } catch (cause) {
+          state = { data: state.data, error: String(cause?.message ?? cause) }
+        }
+        emit()
+      }
+
+      const subscribe = (listener) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      }
+
+      return { refresh, subscribe, get: () => state }
     }
 
     /** Find the caption menubar inside the preload's open shadow root. */
@@ -162,82 +253,105 @@ button.dsh-cb[data-busy='true'] { opacity: 0.6; }
       return bar === null ? null : { root: host.shadowRoot, bar }
     }
 
-    /** Ensure the widget's own stylesheet exists inside the shadow root. */
-    function ensureStyle(root) {
-      if (root.getElementById(STYLE_ID) !== null) return
+    function ensureCaptionStyle(root) {
+      if (root.getElementById(CAPTION_STYLE_ID) !== null) return
       const style = document.createElement('style')
-      style.id = STYLE_ID
-      style.textContent = css
+      style.id = CAPTION_STYLE_ID
+      style.textContent = captionCss
       root.appendChild(style)
     }
 
+    /** Header chip used when there is no desktop caption menu. */
+    function HeaderChip() {
+      const [state, setState] = React.useState(pollerSnapshot())
+      React.useEffect(() => poller.subscribe(setState), [])
+
+      const { data, error } = state
+      const currency = data?.pricing?.currency ?? 'CNY'
+      const loading = data === null && error === null
+      const phase = data?.window?.phase ?? null
+      const balance = error !== null && data === null ? '—' : loading ? '…' : walletNodes(data.balance, currency)
+      const cost = error !== null && data === null ? '—' : loading ? '…' : amountNodes(currency, data?.today?.cost, 'cost')
+
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'dsh-cb-chip',
+          title: tooltip(data, error),
+          'aria-label': ariaLabel(data, error),
+          onClick: () => poller.refresh(true),
+        },
+        h('span', { className: 'dsh-cb-amount', key: 'balance' }, balance),
+        h('span', { className: 'dsh-cb-sep', key: 'sep' }, '·'),
+        h('span', { className: 'dsh-cb-amount', key: 'cost' }, cost),
+        phase === null
+          ? null
+          : h('span', { className: 'dsh-cb-phase', 'data-peak': phase === 'peak', key: 'phase' }, phase === 'peak' ? '峰' : '谷'),
+      )
+    }
+
+    // The poller is created per plugin apply and read by the chip component.
+    let poller = null
+    const pollerSnapshot = () => (poller === null ? { data: null, error: null } : poller.get())
+
     function apply(ctx) {
       ctx.effect(() => {
-        let data = null
-        let error = null
-        let button = null
-        let refreshTimer = 0
-        let mountTimer = 0
+        poller = createPoller()
         let disposed = false
+        let captionButton = null
+        let captionUnsubscribe = null
+        let mountTimer = 0
+        let refreshTimer = 0
+        let fallbackTimer = 0
+        let fallbackRegistered = false
 
-        const repaint = () => {
-          if (button !== null) paint(button, data, error)
-        }
-
-        const refresh = async (force) => {
-          if (disposed) return
-          if (button !== null) button.setAttribute('data-busy', 'true')
-          try {
-            const response = await fetch(`${ROUTE}${force === true ? '?force=1' : ''}`, {
-              credentials: 'same-origin',
-              headers: { accept: 'application/json' },
-            })
-            if (!response.ok) throw new Error(`HTTP ${response.status}`)
-            const payload = await response.json()
-            if (payload?.ok !== true) throw new Error(payload?.error ?? 'bad payload')
-            data = payload
-            error = null
-          } catch (cause) {
-            error = String(cause?.message ?? cause)
-          } finally {
-            if (button !== null) button.removeAttribute('data-busy')
-            repaint()
-          }
-        }
-
-        const mount = () => {
-          if (disposed) return
+        const mountCaption = () => {
+          if (disposed || captionButton !== null) return
           const found = findMenubar()
-          if (found === null) {
-            button = null
-            return
-          }
-          if (button !== null && found.bar.contains(button)) return
-          ensureStyle(found.root)
-          const next = document.createElement('button')
-          next.type = 'button'
-          next.className = 'dsh-cb'
-          next.tabIndex = -1
-          next.addEventListener('click', () => {
-            refresh(true)
-          })
-          found.bar.appendChild(next)
-          button = next
-          repaint()
-          if (data === null && error === null) refresh(false)
+          if (found === null) return
+          ensureCaptionStyle(found.root)
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'dsh-cb'
+          button.tabIndex = -1
+          button.addEventListener('click', () => poller.refresh(true))
+          found.bar.appendChild(button)
+          captionButton = button
+          paintCaption(button, poller.get().data, poller.get().error)
+          captionUnsubscribe = poller.subscribe((state) => paintCaption(captionButton, state.data, state.error))
+          window.clearInterval(mountTimer)
         }
 
-        mount()
-        // Mounting is polled fast so a caption menu that appears late (window
-        // re-created, locale switch) is picked up quickly; the data itself is
-        // refreshed on its own slower timer.
-        mountTimer = window.setInterval(mount, MOUNT_INTERVAL_MS)
-        refreshTimer = window.setInterval(() => {
-          if (button !== null) refresh(false)
-        }, REFRESH_FALLBACK_MS)
+        // Try the caption menu first; fall back to the conversation header only
+        // when this platform has no caption menu at all.
+        mountTimer = window.setInterval(mountCaption, MOUNT_INTERVAL_MS)
+        mountCaption()
+
+        fallbackTimer = window.setTimeout(() => {
+          if (disposed || captionButton !== null || fallbackRegistered) return
+          window.clearInterval(mountTimer)
+          fallbackRegistered = true
+          try {
+            ctx.slots.inject(
+              FALLBACK_SLOT,
+              () =>
+                ctx.slots.register(
+                  { name: FALLBACK_SLOT, id: 'dsh-caption-balance', order: 20 },
+                  HeaderChip,
+                ),
+              'dsh-caption-balance: header chip',
+            )
+          } catch (error) {
+            ctx?.logger?.warn?.(`[dsh-caption-balance] header chip unavailable: ${error?.message ?? error}`)
+          }
+        }, FALLBACK_DELAY_MS)
+
+        refreshTimer = window.setInterval(() => poller.refresh(false), REFRESH_MS)
+        poller.refresh(false)
 
         const onVisible = () => {
-          if (document.visibilityState === 'visible') refresh(false)
+          if (document.visibilityState === 'visible') poller.refresh(false)
         }
         document.addEventListener('visibilitychange', onVisible)
 
@@ -245,13 +359,16 @@ button.dsh-cb[data-busy='true'] { opacity: 0.6; }
           disposed = true
           window.clearInterval(mountTimer)
           window.clearInterval(refreshTimer)
+          window.clearTimeout(fallbackTimer)
           document.removeEventListener('visibilitychange', onVisible)
-          if (button !== null) button.remove()
-          button = null
+          captionUnsubscribe?.()
+          if (captionButton !== null) captionButton.remove()
+          captionButton = null
+          poller = null
         }
-      }, 'dsh-caption-balance: caption button')
+      }, 'dsh-caption-balance: mount')
     }
 
-    return { inject: [], apply }
+    return { inject: ['slots'], apply }
   },
 })
