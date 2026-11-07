@@ -12,6 +12,9 @@
 
 ![标题栏效果](docs/titlebar.png)
 
+[![dshbase 已验证](https://dshbase.com/badges/dsh-caption-balance.svg)](https://dshbase.com/zh/plugins/dsh-caption-balance/)
+[![dshfind](https://dshfind.com/api/badge/resnowh/dsh-caption-balance?lang=zh)](https://dshfind.com/zh/plugins/resnowh/dsh-caption-balance)
+
 - **账户余额** —— 通过官方账号服务读取，和「设置 → 账号与余额」同源，插件本身不接触任何凭证
 - **今日花费** —— 由本机会话日志统计出的 token 用量按价目表折算，附当前时段
 - **峰 / 谷** —— 单字提示当前计价时段：`峰` 为北京时间工作日 9:00–12:00、14:00–18:00（单价 ×2），`谷` 为半价时段，高峰时该字变为琥珀色

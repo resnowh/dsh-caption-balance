@@ -11,6 +11,9 @@ sitting right after the `应用 / 编辑` caption menu:
 
 ![title bar](docs/titlebar.png)
 
+[![dshbase verified](https://dshbase.com/badges/dsh-caption-balance.svg)](https://dshbase.com/plugins/dsh-caption-balance/)
+[![dshfind](https://dshfind.com/api/badge/resnowh/dsh-caption-balance?lang=en)](https://dshfind.com/en/plugins/resnowh/dsh-caption-balance)
+
 - **Account balance** — read through the official account service, the same source
   as *Settings → Account & balance*; the plugin never touches a credential
 - **Today's spend** — local session-log token usage priced with the public price
