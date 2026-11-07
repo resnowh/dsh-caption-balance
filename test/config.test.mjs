@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { DEFAULTS, VERSION, normalizeConfig } from '../lib/config.js'
+import { DEFAULTS, VERSION, normalizeConfig, normalizeDisplay } from '../lib/config.js'
 import pkg from '../package.json' with { type: 'json' }
 
 test('normalizeConfig applies defaults for an empty row', () => {
@@ -37,4 +37,42 @@ test('normalizeConfig clamps unsafe values instead of trusting them', () => {
 
 test('VERSION matches the package version', () => {
   assert.equal(VERSION, pkg.version)
+})
+test('display defaults keep every segment visible', () => {
+  const display = normalizeConfig(undefined).display
+  assert.deepEqual({ ...display }, {
+    position: 'auto',
+    showBalance: true,
+    showToday: true,
+    showPhase: true,
+    smallDecimals: true,
+    lowBalanceThreshold: 10,
+    lowBalanceStyle: 'warn',
+  })
+})
+
+test('display rejects unknown positions and styles, and keeps one segment', () => {
+  const display = normalizeDisplay({
+    position: 'somewhere',
+    lowBalanceStyle: 'purple',
+    lowBalanceThreshold: -5,
+    showBalance: false,
+    showToday: false,
+    showPhase: false,
+  })
+  assert.equal(display.position, 'auto')
+  assert.equal(display.lowBalanceStyle, 'warn')
+  assert.equal(display.lowBalanceThreshold, 0)
+  // Nothing selected would render an empty widget, so the balance comes back.
+  assert.equal(display.showBalance, true)
+  assert.equal(display.showToday, false)
+  assert.equal(display.showPhase, false)
+})
+
+test('display accepts the supported positions', () => {
+  for (const position of ['auto', 'caption', 'header', 'sidebar']) {
+    assert.equal(normalizeDisplay({ position }).position, position)
+  }
+  assert.equal(normalizeDisplay({ lowBalanceStyle: 'danger' }).lowBalanceStyle, 'danger')
+  assert.equal(normalizeDisplay({ showToday: false }).showToday, false)
 })

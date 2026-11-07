@@ -1,17 +1,18 @@
 /**
  * Client half of dsh-caption-balance.
  *
- * Two render targets, one data source:
+ * One data source, three render targets selected by the `display.position`
+ * setting from the host route:
  *
- * 1. Windows desktop — DSH's caption menu is injected by the desktop preload as
- *    a `[data-windows-menu]` host with an open shadow root holding a
- *    `[role=menubar]`. One more button is appended there, right after 编辑, and
- *    inherits the caption's own button styling.
- * 2. Anything without that menu (macOS desktop, `dsh web`) — the widget falls
- *    back to the conversation header's utilities slot, which is where the
- *    session title bar keeps its inline chips.
+ * - `caption` — the Windows desktop caption menu, appended after 编辑, reusing
+ *   its button styling (only works where the desktop preload injects it)
+ * - `header` — the conversation header's utilities slot
+ * - `sidebar` — the sidebar footer row, sized like the navigation rows
+ * - `auto` — caption when that menu exists, otherwise the header chip
  *
- * Both read the same host route and share one poller.
+ * `display.showBalance` / `showToday` / `showPhase` choose the segments,
+ * `display.smallDecimals` turns the smaller decimal run off, and a balance below
+ * `display.lowBalanceThreshold` is tinted with the configured warn/danger tone.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-caption-balance',
@@ -23,11 +24,14 @@ window.__ModuleLoader__.load({
     const MENU_HOST = '[data-windows-menu]'
     const MENUBAR = '[role="menubar"]'
     const CAPTION_STYLE_ID = 'dsh-caption-balance-caption-style'
-    const FALLBACK_STYLE_ID = 'dsh-caption-balance-chip-style'
-    const FALLBACK_SLOT = 'conversation.session.header.utilities'
+    const CHIP_STYLE_ID = 'dsh-caption-balance-chip-style'
+    const HEADER_SLOT = 'conversation.session.header.utilities'
+    const SIDEBAR_SLOT = 'sidebar.footer.action'
     const MOUNT_INTERVAL_MS = 500
     const FALLBACK_DELAY_MS = 4_000
     const REFRESH_MS = 30_000
+
+    const POSITIONS = new Set(['auto', 'caption', 'header', 'sidebar'])
 
     const captionCss = `
 button.dsh-cb {
@@ -38,10 +42,13 @@ button.dsh-cb {
 button.dsh-cb .dsh-cb-dec { font-size: 0.82em; opacity: 0.8; }
 button.dsh-cb .dsh-cb-sep { margin: 0 4px; opacity: 0.45; }
 button.dsh-cb .dsh-cb-phase { margin-left: 6px; font-size: 12px; line-height: inherit; color: var(--dsw-alias-label-tertiary); }
+button.dsh-cb .dsh-cb-phase--first { margin-left: 0; }
 button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-warn-label, #d9a441); }
+button.dsh-cb .dsh-cb-low[data-tone='warn'] { color: var(--dsw-alias-state-warn-label, #d9a441); }
+button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-danger-label, #e5484d); }
 `
 
-    const fallbackCss = `
+    const chipCss = `
 .dsh-cb-chip {
   display: inline-flex; align-items: baseline; flex: none;
   height: 28px; box-sizing: border-box; padding: 0 8px;
@@ -52,13 +59,45 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
 }
 .dsh-cb-chip:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.14)); }
 .dsh-cb-chip:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe); outline-offset: -2px; }
-.dsh-cb-chip .dsh-cb-dec { font-size: 0.82em; opacity: 0.8; }
-.dsh-cb-chip .dsh-cb-sep { margin: 0 4px; opacity: 0.45; }
-.dsh-cb-chip .dsh-cb-phase { margin-left: 6px; font-size: 12px; color: var(--dsw-alias-label-tertiary, inherit); }
-.dsh-cb-chip .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-warn-label, #d9a441); }
+.dsh-cb-side {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; min-width: 0; min-height: 36px; box-sizing: border-box;
+  margin: 0; padding: 7px 9px; border: 0;
+  border-inline: 3px solid transparent;
+  border-radius: var(--dsw-radius-md, 8px);
+  background: transparent; color: var(--dsw-alias-label-secondary, inherit);
+  font-family: inherit; font-size: 14px; line-height: 22px;
+  text-align: left; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.dsh-cb-side:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, 0.14)); }
+.dsh-cb-side:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe); outline-offset: -2px; }
+.dsh-cb-side .dsh-cb-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-secondary, currentColor); }
+.dsh-cb-chip .dsh-cb-dec, .dsh-cb-side .dsh-cb-dec { font-size: 0.82em; opacity: 0.8; }
+.dsh-cb-chip .dsh-cb-sep, .dsh-cb-side .dsh-cb-sep { margin: 0 4px; opacity: 0.45; }
+.dsh-cb-chip .dsh-cb-phase, .dsh-cb-side .dsh-cb-phase { margin-left: 6px; font-size: 12px; color: var(--dsw-alias-label-tertiary, inherit); }
+.dsh-cb-chip .dsh-cb-phase--first, .dsh-cb-side .dsh-cb-phase--first { margin-left: 0; }
+.dsh-cb-chip .dsh-cb-phase[data-peak='true'], .dsh-cb-side .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-warn-label, #d9a441); }
+.dsh-cb-chip .dsh-cb-low[data-tone='warn'], .dsh-cb-side .dsh-cb-low[data-tone='warn'] { color: var(--dsw-alias-state-warn-label, #d9a441); }
+.dsh-cb-chip .dsh-cb-low[data-tone='danger'], .dsh-cb-side .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-danger-label, #e5484d); }
 `
 
     const currencySymbol = (currency) => (currency === 'USD' ? '$' : currency === 'CNY' ? '¥' : '')
+
+    /** Validate the display block the host shipped, so an old host still works. */
+    function displayOf(data) {
+      const source = data?.display !== null && typeof data?.display === 'object' ? data.display : {}
+      return {
+        position: POSITIONS.has(source.position) ? source.position : 'auto',
+        showBalance: source.showBalance !== false,
+        showToday: source.showToday !== false,
+        showPhase: source.showPhase !== false,
+        smallDecimals: source.smallDecimals !== false,
+        lowBalanceThreshold: Number.isFinite(Number(source.lowBalanceThreshold))
+          ? Math.max(0, Number(source.lowBalanceThreshold))
+          : 10,
+        lowBalanceStyle: source.lowBalanceStyle === 'danger' ? 'danger' : 'warn',
+      }
+    }
 
     /** Format one amount, returning its integer and decimal halves separately. */
     function splitMoney(currency, value) {
@@ -75,19 +114,23 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
         : { symbol: currencySymbol(currency), integer: text.slice(0, dot), decimal: text.slice(dot) }
     }
 
-    /** `¥62.69` with the decimals one step smaller, as HTML markup. */
-    function amountMarkup(currency, value) {
+    /** `¥62.69`, with the decimal run optionally one step smaller, as HTML. */
+    function amountMarkup(currency, value, smallDecimals) {
       const parts = splitMoney(currency, value)
       if (parts === null) return '—'
-      if (parts.decimal.length === 0) return `${parts.symbol}${parts.integer}`
+      if (parts.decimal.length === 0 || smallDecimals === false) {
+        return `${parts.symbol}${parts.integer}${parts.decimal}`
+      }
       return `${parts.symbol}${parts.integer}<span class="dsh-cb-dec">${parts.decimal}</span>`
     }
 
-    /** The same amount as React nodes, for the header chip. */
-    function amountNodes(currency, value, key) {
+    /** The same amount as React nodes. */
+    function amountNodes(currency, value, smallDecimals, key) {
       const parts = splitMoney(currency, value)
       if (parts === null) return h('span', { key }, '—')
-      if (parts.decimal.length === 0) return h('span', { key }, `${parts.symbol}${parts.integer}`)
+      if (parts.decimal.length === 0 || smallDecimals === false) {
+        return h('span', { key }, `${parts.symbol}${parts.integer}${parts.decimal}`)
+      }
       return h(
         'span',
         { key },
@@ -129,17 +172,17 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
       return wallets.map((wallet) => amountText(wallet.currency ?? currency, wallet.balance)).join(' / ')
     }
 
-    function walletMarkup(balance, currency) {
+    function walletMarkup(balance, currency, smallDecimals) {
       if (balance === null || balance === undefined) return '…'
       if (balance.status !== 'ready') return walletSummary(balance, currency)
       const wallets = Array.isArray(balance.wallets) ? balance.wallets : []
       if (wallets.length === 0) return '—'
       return wallets
-        .map((wallet, index) => `${index > 0 ? ' / ' : ''}${amountMarkup(wallet.currency ?? currency, wallet.balance)}`)
+        .map((wallet, index) => `${index > 0 ? ' / ' : ''}${amountMarkup(wallet.currency ?? currency, wallet.balance, smallDecimals)}`)
         .join('')
     }
 
-    function walletNodes(balance, currency) {
+    function walletNodes(balance, currency, smallDecimals) {
       if (balance === null || balance === undefined) return [h('span', { key: 'x' }, '…')]
       if (balance.status !== 'ready') return [h('span', { key: 'x' }, walletSummary(balance, currency))]
       const wallets = Array.isArray(balance.wallets) ? balance.wallets : []
@@ -147,9 +190,35 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
       const nodes = []
       wallets.forEach((wallet, index) => {
         if (index > 0) nodes.push(h('span', { key: `sep-${index}` }, ' / '))
-        nodes.push(amountNodes(wallet.currency ?? currency, wallet.balance, `w-${index}`))
+        nodes.push(amountNodes(wallet.currency ?? currency, wallet.balance, smallDecimals, `w-${index}`))
       })
       return nodes
+    }
+
+    /** Total of the wallets in the display currency, or null when unknown. */
+    function walletTotal(balance, currency) {
+      if (balance === null || balance === undefined || balance.status !== 'ready') return null
+      const wallets = Array.isArray(balance.wallets) ? balance.wallets : []
+      const matching = wallets.filter((wallet) => (wallet.currency ?? currency) === currency)
+      const chosen = matching.length > 0 ? matching : wallets
+      let total = 0
+      let seen = false
+      for (const wallet of chosen) {
+        const number = Number(wallet.balance)
+        if (!Number.isFinite(number)) continue
+        total += number
+        seen = true
+      }
+      return seen ? total : null
+    }
+
+    /** `warn` / `danger` when the balance sits below the configured threshold. */
+    function lowTone(data, display) {
+      if (!(display.lowBalanceThreshold > 0)) return null
+      const currency = data?.pricing?.currency ?? 'CNY'
+      const total = walletTotal(data?.balance, currency)
+      if (total === null || total >= display.lowBalanceThreshold) return null
+      return display.lowBalanceStyle === 'danger' ? 'danger' : 'warn'
     }
 
     function bonusText(balance, currency) {
@@ -160,7 +229,7 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
       return positive.map((wallet) => amountText(wallet.currency ?? currency, wallet.balance)).join(' / ')
     }
 
-    /** Multi-line native tooltip describing every number behind the button. */
+    /** Multi-line native tooltip describing every number behind the widget. */
     function tooltip(data, error) {
       if (error !== null) return ['余额读取失败', error, '点击重试'].join('\n')
       if (data === null) return '正在读取余额与用量…'
@@ -187,27 +256,50 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
       return `余额 ${walletSummary(data?.balance, currency)}，今日花费 ${data?.today ? amountText(currency, data.today.cost) : '…'}`
     }
 
-    /** Fill one caption button (DOM) with the latest state. */
-    function paintCaption(button, data, error) {
-      if (button === null) return
+    /** Every segment currently visible, in display order. */
+    function segmentsOf(data, error, display) {
       const currency = data?.pricing?.currency ?? 'CNY'
-      const loading = data === null && error === null
-      const balance = error !== null && data === null ? '—' : loading ? '…' : walletMarkup(data.balance, currency)
-      const cost = error !== null && data === null ? '—' : loading ? '…' : amountMarkup(currency, data?.today?.cost)
-      const phase = data?.window?.phase ?? null
+      const loading = data === null
+      const failed = error !== null && data === null
+      const tone = error === null && data !== null ? lowTone(data, display) : null
 
-      button.innerHTML =
-        `<span class="dsh-cb-amount">${balance}</span>` +
-        `<span class="dsh-cb-sep">·</span>` +
-        `<span class="dsh-cb-amount">${cost}</span>` +
-        (phase === null
-          ? ''
-          : `<span class="dsh-cb-phase" data-peak="${phase === 'peak'}">${phase === 'peak' ? '峰' : '谷'}</span>`)
-      button.title = tooltip(data, error)
-      button.setAttribute('aria-label', ariaLabel(data, error))
+      return {
+        currency,
+        tone,
+        balance: display.showBalance
+          ? (failed ? '—' : loading ? '…' : walletMarkup(data.balance, currency, display.smallDecimals))
+          : '',
+        cost: display.showToday ? (failed ? '—' : loading ? '…' : amountMarkup(currency, data?.today?.cost, display.smallDecimals)) : '',
+        phase: display.showPhase ? data?.window?.phase ?? null : null,
+      }
     }
 
-    /** Shared poller: one request loop, any number of render targets. */
+    /** Fill the caption button with the visible segments. */
+    function paintCaption(button, state, display) {
+      if (button === null) return
+      const view = segmentsOf(state.data, state.error, display)
+      const tone = view.tone
+      const parts = []
+      if (view.balance !== '') {
+        parts.push(`<span class="dsh-cb-balance${tone === null ? '' : ' dsh-cb-low'}"${tone === null ? '' : ` data-tone="${tone}"`}>${view.balance}</span>`)
+      }
+      if (view.cost !== '') {
+        if (parts.length > 0) parts.push('<span class="dsh-cb-sep">·</span>')
+        parts.push(`<span class="dsh-cb-cost">${view.cost}</span>`)
+      }
+      if (view.phase !== null) {
+        const first = parts.length === 0
+        parts.push(
+          `<span class="dsh-cb-phase${first ? ' dsh-cb-phase--first' : ''}" data-peak="${view.phase === 'peak'}">${view.phase === 'peak' ? '峰' : '谷'}</span>`,
+        )
+      }
+      if (parts.length === 0) parts.push('<span class="dsh-cb-balance">—</span>')
+      button.innerHTML = parts.join('')
+      button.title = tooltip(state.data, state.error)
+      button.setAttribute('aria-label', ariaLabel(state.data, state.error))
+    }
+
+    /** Shared poller: one request loop feeding every mounted target. */
     function createPoller() {
       let state = { data: null, error: null }
       const listeners = new Set()
@@ -246,6 +338,10 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
       return { refresh, subscribe, get: () => state }
     }
 
+    // The poller is created per apply and read by the slot components.
+    let poller = null
+    const pollerSnapshot = () => (poller === null ? { data: null, error: null } : poller.get())
+
     /** Find the caption menubar inside the preload's open shadow root. */
     function findMenubar() {
       const host = document.querySelector(MENU_HOST)
@@ -254,56 +350,96 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
       return bar === null ? null : { root: host.shadowRoot, bar }
     }
 
-    /** Inject the header-chip stylesheet into the document once. */
-    function ensureFallbackStyle() {
-      if (document.getElementById(FALLBACK_STYLE_ID) !== null) return
+    function ensureStyle(id, css, parent) {
+      if (parent.getElementById(id) !== null) return
       const style = document.createElement('style')
-      style.id = FALLBACK_STYLE_ID
-      style.textContent = fallbackCss
-      document.head.appendChild(style)
+      style.id = id
+      style.textContent = css
+      parent.appendChild(style)
     }
 
-    function ensureCaptionStyle(root) {
-      if (root.getElementById(CAPTION_STYLE_ID) !== null) return
-      const style = document.createElement('style')
-      style.id = CAPTION_STYLE_ID
-      style.textContent = captionCss
-      root.appendChild(style)
-    }
-
-    /** Header chip used when there is no desktop caption menu. */
+    /** Header chip, used when the caption menu is not the chosen target. */
     function HeaderChip() {
       const [state, setState] = React.useState(pollerSnapshot())
       React.useEffect(() => poller.subscribe(setState), [])
+      const display = displayOf(state.data)
+      const view = segmentsOf(state.data, state.error, display)
 
-      const { data, error } = state
-      const currency = data?.pricing?.currency ?? 'CNY'
-      const loading = data === null && error === null
-      const phase = data?.window?.phase ?? null
-      const balance = error !== null && data === null ? '—' : loading ? '…' : walletNodes(data.balance, currency)
-      const cost = error !== null && data === null ? '—' : loading ? '…' : amountNodes(currency, data?.today?.cost, 'cost')
+      const children = []
+      if (view.balance !== '') children.push(h('span', { className: `dsh-cb-balance${view.tone ? ' dsh-cb-low' : ''}`, 'data-tone': view.tone ?? undefined, key: 'balance' }, view.balance))
+      if (view.cost !== '') {
+        if (children.length > 0) children.push(h('span', { className: 'dsh-cb-sep', key: 'sep' }, '·'))
+        children.push(h('span', { className: 'dsh-cb-cost', key: 'cost' }, view.cost))
+      }
+      if (view.phase !== null) {
+        children.push(
+          h(
+            'span',
+            { className: `dsh-cb-phase${children.length === 0 ? ' dsh-cb-phase--first' : ''}`, 'data-peak': view.phase === 'peak', key: 'phase' },
+            view.phase === 'peak' ? '峰' : '谷',
+          ),
+        )
+      }
 
       return h(
         'button',
         {
           type: 'button',
           className: 'dsh-cb-chip',
-          title: tooltip(data, error),
-          'aria-label': ariaLabel(data, error),
+          title: tooltip(state.data, state.error),
+          'aria-label': ariaLabel(state.data, state.error),
           onClick: () => poller.refresh(true),
         },
-        h('span', { className: 'dsh-cb-amount', key: 'balance' }, balance),
-        h('span', { className: 'dsh-cb-sep', key: 'sep' }, '·'),
-        h('span', { className: 'dsh-cb-amount', key: 'cost' }, cost),
-        phase === null
-          ? null
-          : h('span', { className: 'dsh-cb-phase', 'data-peak': phase === 'peak', key: 'phase' }, phase === 'peak' ? '峰' : '谷'),
+        children,
       )
     }
 
-    // The poller is created per plugin apply and read by the chip component.
-    let poller = null
-    const pollerSnapshot = () => (poller === null ? { data: null, error: null } : poller.get())
+    function WalletIcon() {
+      return h(
+        'svg',
+        { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true, focusable: false },
+        h('rect', { x: 1.2, y: 3.6, width: 13.6, height: 8.8, rx: 2, stroke: 'currentColor', strokeWidth: 1.2 }),
+        h('path', { d: 'M1.2 6.4h13.6', stroke: 'currentColor', strokeWidth: 1.2 }),
+        h('circle', { cx: 11.4, cy: 9.6, r: 1.2, fill: 'currentColor' }),
+      )
+    }
+
+    /** Sidebar footer row, laid out like the navigation rows. */
+    function SidebarRow() {
+      const [state, setState] = React.useState(pollerSnapshot())
+      React.useEffect(() => poller.subscribe(setState), [])
+      const display = displayOf(state.data)
+      const view = segmentsOf(state.data, state.error, display)
+
+      const children = []
+      if (view.balance !== '') children.push(h('span', { className: `dsh-cb-balance${view.tone ? ' dsh-cb-low' : ''}`, 'data-tone': view.tone ?? undefined, key: 'balance' }, view.balance))
+      if (view.cost !== '') {
+        if (children.length > 0) children.push(h('span', { className: 'dsh-cb-sep', key: 'sep' }, '·'))
+        children.push(h('span', { className: 'dsh-cb-cost', key: 'cost' }, view.cost))
+      }
+      if (view.phase !== null) {
+        children.push(
+          h(
+            'span',
+            { className: `dsh-cb-phase${children.length === 0 ? ' dsh-cb-phase--first' : ''}`, 'data-peak': view.phase === 'peak', key: 'phase' },
+            view.phase === 'peak' ? '峰' : '谷',
+          ),
+        )
+      }
+
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'dsh-cb-side',
+          title: tooltip(state.data, state.error),
+          'aria-label': ariaLabel(state.data, state.error),
+          onClick: () => poller.refresh(true),
+        },
+        h('span', { className: 'dsh-cb-icon', key: 'icon' }, h(WalletIcon)),
+        children,
+      )
+    }
 
     function apply(ctx) {
       ctx.effect(() => {
@@ -312,15 +448,29 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
         let captionButton = null
         let captionUnsubscribe = null
         let mountTimer = 0
-        let refreshTimer = 0
         let fallbackTimer = 0
-        let fallbackRegistered = false
+        let refreshTimer = 0
+        let registered = false
+
+        const registerSlot = (name, component) => {
+          if (registered) return
+          registered = true
+          try {
+            ctx.slots.inject(
+              name,
+              () => ctx.slots.register({ name, id: 'dsh-caption-balance', order: 20 }, component),
+              `dsh-caption-balance: ${name}`,
+            )
+          } catch (error) {
+            ctx?.logger?.warn?.(`[dsh-caption-balance] slot ${name} unavailable: ${error?.message ?? error}`)
+          }
+        }
 
         const mountCaption = () => {
           if (disposed || captionButton !== null) return
           const found = findMenubar()
           if (found === null) return
-          ensureCaptionStyle(found.root)
+          ensureStyle(CAPTION_STYLE_ID, captionCss, found.root)
           const button = document.createElement('button')
           button.type = 'button'
           button.className = 'dsh-cb'
@@ -328,55 +478,56 @@ button.dsh-cb .dsh-cb-phase[data-peak='true'] { color: var(--dsw-alias-state-war
           button.addEventListener('click', () => poller.refresh(true))
           found.bar.appendChild(button)
           captionButton = button
-          paintCaption(button, poller.get().data, poller.get().error)
-          captionUnsubscribe = poller.subscribe((state) => paintCaption(captionButton, state.data, state.error))
+          paintCaption(button, poller.get(), displayOf(poller.get().data))
+          captionUnsubscribe = poller.subscribe((state) => paintCaption(captionButton, state, displayOf(state.data)))
           window.clearInterval(mountTimer)
         }
 
-        // Try the caption menu first; fall back to the conversation header only
-        // when this platform has no caption menu at all.
-        mountTimer = window.setInterval(mountCaption, MOUNT_INTERVAL_MS)
-        mountCaption()
-
-        fallbackTimer = window.setTimeout(() => {
-          if (disposed || captionButton !== null || fallbackRegistered) return
-          window.clearInterval(mountTimer)
-          fallbackRegistered = true
-          ensureFallbackStyle()
-          try {
-            ctx.slots.inject(
-              FALLBACK_SLOT,
-              () =>
-                ctx.slots.register(
-                  { name: FALLBACK_SLOT, id: 'dsh-caption-balance', order: 20 },
-                  HeaderChip,
-                ),
-              'dsh-caption-balance: header chip',
-            )
-          } catch (error) {
-            ctx?.logger?.warn?.(`[dsh-caption-balance] header chip unavailable: ${error?.message ?? error}`)
+        const boot = async () => {
+          await poller.refresh(false)
+          if (disposed) return
+          const display = displayOf(poller.get().data)
+          if (display.position === 'header') {
+            ensureStyle(CHIP_STYLE_ID, chipCss, document.head)
+            registerSlot(HEADER_SLOT, HeaderChip)
+            return
           }
-        }, FALLBACK_DELAY_MS)
+          if (display.position === 'sidebar') {
+            ensureStyle(CHIP_STYLE_ID, chipCss, document.head)
+            registerSlot(SIDEBAR_SLOT, SidebarRow)
+            return
+          }
+          // `auto` and `caption` both mount into the caption menu.
+          mountTimer = window.setInterval(mountCaption, MOUNT_INTERVAL_MS)
+          mountCaption()
+          if (display.position === 'auto') {
+            fallbackTimer = window.setTimeout(() => {
+              if (disposed || captionButton !== null || registered) return
+              window.clearInterval(mountTimer)
+              ensureStyle(CHIP_STYLE_ID, chipCss, document.head)
+              registerSlot(HEADER_SLOT, HeaderChip)
+            }, FALLBACK_DELAY_MS)
+          }
+        }
 
         refreshTimer = window.setInterval(() => poller.refresh(false), REFRESH_MS)
-        poller.refresh(false)
-
         const onVisible = () => {
           if (document.visibilityState === 'visible') poller.refresh(false)
         }
         document.addEventListener('visibilitychange', onVisible)
+        boot()
 
         return () => {
           disposed = true
           window.clearInterval(mountTimer)
-          window.clearInterval(refreshTimer)
           window.clearTimeout(fallbackTimer)
+          window.clearInterval(refreshTimer)
           document.removeEventListener('visibilitychange', onVisible)
           captionUnsubscribe?.()
           if (captionButton !== null) captionButton.remove()
           captionButton = null
+          document.getElementById(CHIP_STYLE_ID)?.remove()
           poller = null
-          document.getElementById(FALLBACK_STYLE_ID)?.remove()
         }
       }, 'dsh-caption-balance: mount')
     }

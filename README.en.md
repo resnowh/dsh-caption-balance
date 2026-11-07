@@ -2,8 +2,10 @@
 
 ![test](https://github.com/resnowh/dsh-caption-balance/actions/workflows/test.yml/badge.svg)
 
-A one-line account balance strip for the **DeepSeek Harness desktop title bar**,
-sitting right after the `应用 / 编辑` caption menu:
+[中文](README.md) | English
+
+A one-line account reading for the DeepSeek Harness UI, placed in the
+**desktop title bar** right after the `应用 / 编辑` caption menu by default:
 
 ```
 应用  编辑  ¥61.05 · ¥4.04  谷
@@ -21,14 +23,18 @@ sitting right after the `应用 / 编辑` caption menu:
 - **Peak / off-peak** — a single character: `峰` (peak, Beijing weekdays
   09:00–12:00 and 14:00–18:00, ×2) or `谷` (off-peak, half price); the peak
   character turns amber
+- **Low-balance tint** — below a configurable threshold the balance switches to
+  amber or red
 - **Hover for details** — balance, bonus wallets, today/month tokens and cost,
   current window, update time
 - **Click to refresh**, otherwise refreshes every 30 seconds
+- **Configurable position and content** — title bar, session header or sidebar
+  footer; balance, today's spend and the peak character can be toggled
 - Decimal digits render one step smaller so the number stays stable and quiet
 
 ## Install
 
-Requires **DeepSeek Harness desktop (Windows)** `0.2.2-rc.1` or newer.
+Requires **DeepSeek Harness** `0.2.2-rc.1` or newer.
 
 ```sh
 dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
@@ -52,6 +58,14 @@ Edit the row named `dsh-caption-balance` in the profile's `cordis.patch.yml`:
     keepDays: 45               # usage log retention (covers one month)
     sessionsDir: null          # defaults to $DSH_HOME/sessions
     allowHosts: []             # extra hostnames allowed to read the summary route
+    display:
+      position: auto           # auto | caption | header | sidebar
+      showBalance: true        # show the balance
+      showToday: true          # show today's spend
+      showPhase: true          # show the peak / off-peak character
+      smallDecimals: true      # render decimals one step smaller
+      lowBalanceThreshold: 10  # tint below this amount, 0 disables
+      lowBalanceStyle: warn    # warn (amber) | danger (red)
     aliases:
       deepseek-v4-flash: deepseek-flash
     models:
@@ -65,6 +79,24 @@ Prices are made up of the **off-peak** rate; peak hours multiply them by
 `peakMultiplier`. Models without a configured price still count tokens but are
 excluded from cost and listed as unpriced.
 
+### Display settings
+
+`display` decides where the widget renders, which segments it shows, and how a
+low balance is highlighted:
+
+| Field | Values | Meaning |
+|---|---|---|
+| `position` | `auto` (default) / `caption` / `header` / `sidebar` | `auto`: caption menu when present, otherwise the session header; `caption`: desktop title bar only; `header`: session header only; `sidebar`: sidebar footer row |
+| `showBalance` | `true` / `false` | Show the balance |
+| `showToday` | `true` / `false` | Show today's spend |
+| `showPhase` | `true` / `false` | Show the peak / off-peak character |
+| `smallDecimals` | `true` / `false` | Render decimals one step smaller |
+| `lowBalanceThreshold` | number, default `10` | Tint the balance below this amount; `0` disables |
+| `lowBalanceStyle` | `warn` (default) / `danger` | Amber or red |
+
+If all three `show` flags are off, the balance is kept so the widget never
+renders empty. Reload the page (`Ctrl+Shift+R`) after changing the config.
+
 ## How it works
 
 - The host half registers one exact route, `GET /api/dsh-caption-balance/summary`,
@@ -76,15 +108,17 @@ excluded from cost and listed as unpriced.
   structure, and only `assistant/message` events with `data.usage` are counted.
   Each session directory is read from its highest-version log file only, so a
   migrated session is never counted twice.
-- The client half appends one button to the caption menubar that the desktop
-  preload injects, right after 编辑, reusing the caption's own button styling.
-- On platforms without that caption menu (macOS desktop, `dsh web`) the widget
-  falls back to the conversation header's utilities slot.
+- The client half picks its render target from `display.position`: the caption
+  menubar injected by the desktop preload (after 编辑, reusing the caption's own
+  button styling), the conversation header's utilities slot, or the sidebar
+  footer row.
+- With the default `auto` position the caption menu wins, and the conversation
+  header is used when that menu does not exist (macOS desktop, `dsh web`).
 
 ## Limitations
 
-- The desktop title bar placement is **Windows-only**; elsewhere the fallback
-  chip appears in the session header instead
+- The title-bar placement is **Windows desktop only**; elsewhere `auto` switches
+  to the session header, or set `position: header` / `position: sidebar`
 - Cost is an **estimate** from the configured price table, not a bill
 - Chinese public holidays are not modelled; peak pricing follows the weekday rule
 - Today/month buckets use the host's local timezone; peak windows use Beijing time

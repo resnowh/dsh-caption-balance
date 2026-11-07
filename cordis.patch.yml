@@ -3,6 +3,17 @@
 # models 里的价格单位是「元 / 百万 tokens」，填**空闲时段**单价；高峰时段按
 # peakMultiplier 倍计算（默认 2，与官方价目表一致）。aliases 把带日期或后缀的
 # 模型名映射到 models 里的计价键，未配置单价的模型仍统计 token，但不计入花费。
+#
+# display 控制外观与位置：
+#   position: auto | caption | header | sidebar
+#     auto    标题栏菜单存在时放标题栏，否则退回会话标题栏
+#     caption 只放桌面端标题栏（应用 / 编辑 右侧）
+#     header  只放会话标题栏
+#     sidebar 只放侧边栏底部（导航行样式）
+#   showBalance / showToday / showPhase  是否显示余额、今日花费、峰谷单字
+#   smallDecimals  小数部分是否小一号
+#   lowBalanceThreshold  余额低于该值时变色（0 关闭）
+#   lowBalanceStyle  warn（琥珀）| danger（红）
 - insert:
     - id: dsh-caption-balance
       name: dsh-caption-balance
@@ -14,6 +25,14 @@
         peakMultiplier: 2
         keepDays: 45
         sessionsDir: null
+        display:
+          position: auto
+          showBalance: true
+          showToday: true
+          showPhase: true
+          smallDecimals: true
+          lowBalanceThreshold: 10
+          lowBalanceStyle: warn
         aliases:
           deepseek-v4-flash: deepseek-flash
           deepseek-v4-flash-vision-exp: deepseek-flash

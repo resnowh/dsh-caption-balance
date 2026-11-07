@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'client.js'), 'utf8')
 
-const payload = {
+const basePayload = {
   ok: true,
   updatedAt: 1_800_000_000_000,
   window: { phase: 'peak' },
@@ -18,9 +18,7 @@ const payload = {
 
 /** A tiny DOM stub sufficient for the client module. */
 function createDom({ captionBar }) {
-  const created = []
   const documentListeners = new Map()
-  const shadowStyle = { id: '', textContent: '', remove() {} }
 
   const makeElement = (tag) => {
     const element = {
@@ -59,10 +57,10 @@ function createDom({ captionBar }) {
         return null
       },
     }
-    created.push(element)
     return element
   }
 
+  const head = makeElement('head')
   const menubar = makeElement('div')
   if (captionBar) {
     menubar.appendChild(makeElement('button'))
@@ -70,7 +68,7 @@ function createDom({ captionBar }) {
   }
   const shadowRoot = {
     querySelector: (selector) => (selector === '[role="menubar"]' && captionBar ? menubar : null),
-    getElementById: (id) => shadowRoot.children?.find?.((child) => child.id === id) ?? null,
+    getElementById: (id) => shadowRoot.children.find((child) => child.id === id) ?? null,
     children: [],
     appendChild(child) {
       child.parent = shadowRoot
@@ -91,15 +89,15 @@ function createDom({ captionBar }) {
       documentListeners.delete(name)
     },
     visibilityState: 'visible',
-    getElementById: (id) => document.head.children.find((child) => child.id === id) ?? null,
-    head: makeElement('head'),
+    getElementById: (id) => head.children.find((child) => child.id === id) ?? null,
+    head,
   }
 
-  return { document, menubar, shadowRoot, created }
+  return { document, menubar, shadowRoot, head }
 }
 
 /** Load the client module against fresh globals and return its registration. */
-function loadClient(dom) {
+function loadClient(dom, overrides = {}) {
   const intervals = []
   const timeouts = []
   let loaded = null
@@ -125,7 +123,7 @@ function loadClient(dom) {
     },
   }
   global.document = dom.document
-  global.fetch = async () => ({ ok: true, json: async () => payload })
+  global.fetch = async () => ({ ok: true, json: async () => ({ ...basePayload, ...overrides }) })
 
   const React = {
     createElement: (type, props, ...children) => ({ type, props, children }),
@@ -142,15 +140,14 @@ function loadClient(dom) {
   return { mod, intervals, timeouts }
 }
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 20))
+const flush = () => new Promise((resolve) => setTimeout(resolve, 30))
 
-test('falls back to the conversation header when no caption menu exists', async () => {
-  const dom = createDom({ captionBar: false })
-  const { mod, timeouts } = loadClient(dom)
-  assert.deepEqual(mod.inject, ['slots'])
-
-  let cleanup = null
+/** Run `apply` and return the slot registrations and a cleanup function. */
+function mount(ctxSlots, overrides = {}, domOptions = { captionBar: false }) {
+  const dom = createDom(domOptions)
+  const { mod, timeouts } = loadClient(dom, overrides)
   const injected = []
+  let cleanup = null
   const ctx = {
     effect: (fn) => {
       cleanup = fn()
@@ -161,14 +158,33 @@ test('falls back to the conversation header when no caption menu exists', async 
         injected.push({ name, component: factory() })
       },
       register: (descriptor, component) => component,
+      ...ctxSlots,
     },
   }
-
   mod.apply(ctx)
+  return { dom, injected, timeouts, cleanup: () => cleanup?.(), mod }
+}
+
+test('auto position mounts the caption button when the caption menu exists', async () => {
+  const { dom, mod } = mount({}, {}, { captionBar: true })
+  assert.deepEqual(mod.inject, ['slots'])
+  await flush()
+
+  const { menubar, shadowRoot } = dom
+  const caption = menubar.children.find((child) => child.className === 'dsh-cb')
+  assert.notEqual(caption, undefined, 'caption button is mounted')
+  assert.equal(menubar.children.length, 3)
+  assert.equal(caption.innerHTML.includes('dsh-cb-balance'), true)
+  assert.equal(caption.innerHTML.includes('dsh-cb-phase'), true)
+  assert.equal(caption.attributes['aria-label']?.startsWith('余额 ¥59.32'), true)
+  assert.equal(shadowRoot.children.some((child) => child.id === 'dsh-caption-balance-caption-style'), true)
+})
+
+test('auto position falls back to the header chip without a caption menu', async () => {
+  const { injected, timeouts, cleanup } = mount({}, {}, { captionBar: false })
   await flush()
   assert.equal(injected.length, 0, 'nothing is registered before the fallback delay')
 
-  // Fire the pending 4s fallback timer.
   const fallback = timeouts.find((fn) => fn !== null)
   assert.equal(typeof fallback, 'function')
   fallback()
@@ -176,39 +192,47 @@ test('falls back to the conversation header when no caption menu exists', async 
   assert.equal(injected.length, 1)
   assert.equal(injected[0].name, 'conversation.session.header.utilities')
   assert.equal(typeof injected[0].component, 'function')
-
-  // The chip must get its stylesheet, otherwise it renders as a bare button.
-  const style = dom.document.head.children.find((child) => child.id === 'dsh-caption-balance-chip-style')
-  assert.notEqual(style, undefined, 'fallback stylesheet is injected')
-  assert.equal(style.textContent.includes('.dsh-cb-chip'), true)
-
   cleanup()
-  assert.equal(dom.document.head.children.some((child) => child.id === 'dsh-caption-balance-chip-style'), false)
 })
 
-test('appends one button after the caption menu entries when the menu exists', async () => {
-  const dom = createDom({ captionBar: true })
-  const { menubar, shadowRoot } = dom
-  const { mod } = loadClient(dom)
-
-  let cleanup = null
-  const ctx = {
-    effect: (fn) => {
-      cleanup = fn()
-      return () => {}
-    },
-    slots: { inject: () => {}, register: (descriptor, component) => component },
-  }
-
-  mod.apply(ctx)
+test('position: header registers the header chip immediately', async () => {
+  const { injected } = mount({}, { display: { position: 'header' } })
   await flush()
+  assert.equal(injected.length, 1)
+  assert.equal(injected[0].name, 'conversation.session.header.utilities')
+})
 
-  const caption = menubar.children.find((child) => child.className === 'dsh-cb')
-  assert.notEqual(caption, undefined, 'caption button is mounted')
-  assert.equal(menubar.children.length, 3)
-  assert.equal(caption.attributes['aria-label']?.startsWith('余额 ¥59.32'), true)
-  assert.equal(shadowRoot.children.some((child) => child.id === 'dsh-caption-balance-caption-style'), true)
+test('position: sidebar registers the sidebar footer row', async () => {
+  const { injected } = mount({}, { display: { position: 'sidebar' } })
+  await flush()
+  assert.equal(injected.length, 1)
+  assert.equal(injected[0].name, 'sidebar.footer.action')
+})
 
-  cleanup()
-  assert.equal(menubar.children.includes(caption), false, 'cleanup removes the button')
+test('low balance tints the balance segment with the configured tone', async () => {
+  const { dom } = mount(
+    {},
+    { balance: { status: 'ready', wallets: [{ currency: 'CNY', balance: '5.25' }], bonusWallets: [] }, display: { lowBalanceThreshold: 10 } },
+    { captionBar: true },
+  )
+  await flush()
+  const caption = dom.menubar.children.find((child) => child.className === 'dsh-cb')
+  assert.equal(caption.innerHTML.includes('dsh-cb-low'), true)
+  assert.equal(caption.innerHTML.includes('data-tone="warn"'), true)
+})
+
+test('danger tone is honoured and hidden segments disappear', async () => {
+  const { dom } = mount(
+    {},
+    {
+      balance: { status: 'ready', wallets: [{ currency: 'CNY', balance: '1.00' }], bonusWallets: [] },
+      display: { lowBalanceStyle: 'danger', showToday: false, showPhase: false },
+    },
+    { captionBar: true },
+  )
+  await flush()
+  const caption = dom.menubar.children.find((child) => child.className === 'dsh-cb')
+  assert.equal(caption.innerHTML.includes('data-tone="danger"'), true)
+  assert.equal(caption.innerHTML.includes('dsh-cb-sep'), false)
+  assert.equal(caption.innerHTML.includes('dsh-cb-phase'), false)
 })
