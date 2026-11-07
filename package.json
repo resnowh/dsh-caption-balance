@@ -42,7 +42,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "meta": {
     "title": "标题栏余额",
