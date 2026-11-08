@@ -59,7 +59,11 @@ dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
       showPhase: true          # 显示峰 / 谷单字
       smallDecimals: true      # 小数部分小一号
       lowBalanceThreshold: 10  # 余额低于该值变色，0 关闭
-      lowBalanceStyle: warn    # warn（琥珀）| danger（红）
+      lowBalanceStyle: warn    # warn（琥珀）| danger（红）| gradient（渐变）
+      gradientFromAmount: 0    # 渐变起点金额
+      gradientFromColor: '#e5484d'
+      gradientToAmount: 50     # 渐变终点金额
+      gradientToColor: '#22c55e'
     aliases:
       deepseek-v4-flash: deepseek-flash
     models:
@@ -82,8 +86,14 @@ dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
 | `showToday` | `true` / `false` | 是否显示今日花费 |
 | `showPhase` | `true` / `false` | 是否显示峰 / 谷单字 |
 | `smallDecimals` | `true` / `false` | 小数部分是否缩小一号 |
-| `lowBalanceThreshold` | 数字，默认 `10` | 余额低于该值时变色；`0` 关闭 |
-| `lowBalanceStyle` | `warn`（默认）/ `danger` | `warn` 琥珀、`danger` 红色 |
+| `lowBalanceThreshold` | 数字，默认 `10` | 余额低于该值时变色；`0` 关闭（渐变模式下不使用） |
+| `lowBalanceStyle` | `warn`（默认）/ `danger` / `gradient` | `warn` 琥珀、`danger` 红色、`gradient` 按余额在两端颜色间渐变 |
+| `gradientFromAmount` | 数字，默认 `0` | 渐变起点：余额不高于该值时用 `gradientFromColor` |
+| `gradientFromColor` | `#rrggbb`，默认 `#e5484d` | 渐变起点颜色（低余额） |
+| `gradientToAmount` | 数字，默认 `50` | 渐变终点：余额不低于该值时用 `gradientToColor`，中间线性过渡 |
+| `gradientToColor` | `#rrggbb`，默认 `#22c55e` | 渐变终点颜色（余额充足） |
+
+例如「余额从 ¥0 的红色，到 ¥50 的绿色，中间逐渐过渡」就是 `lowBalanceStyle: gradient` + `gradientFromAmount: 0` / `gradientFromColor: '#e5484d'` / `gradientToAmount: 50` / `gradientToColor: '#22c55e'`。设置里也有颜色选择器和渐变预览条。
 
 三个 `show` 开关全关时会自动保留余额，避免出现空控件。改完配置后重启应用即可生效（桌面版没有刷新页面快捷键）。
 

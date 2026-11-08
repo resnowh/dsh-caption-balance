@@ -65,7 +65,11 @@ Edit the row named `dsh-caption-balance` in the profile's `cordis.patch.yml`:
       showPhase: true          # show the peak / off-peak character
       smallDecimals: true      # render decimals one step smaller
       lowBalanceThreshold: 10  # tint below this amount, 0 disables
-      lowBalanceStyle: warn    # warn (amber) | danger (red)
+      lowBalanceStyle: warn    # warn (amber) | danger (red) | gradient
+      gradientFromAmount: 0    # gradient start amount
+      gradientFromColor: '#e5484d'
+      gradientToAmount: 50     # gradient end amount
+      gradientToColor: '#22c55e'
     aliases:
       deepseek-v4-flash: deepseek-flash
     models:
@@ -91,8 +95,17 @@ low balance is highlighted:
 | `showToday` | `true` / `false` | Show today's spend |
 | `showPhase` | `true` / `false` | Show the peak / off-peak character |
 | `smallDecimals` | `true` / `false` | Render decimals one step smaller |
-| `lowBalanceThreshold` | number, default `10` | Tint the balance below this amount; `0` disables |
-| `lowBalanceStyle` | `warn` (default) / `danger` | Amber or red |
+| `lowBalanceThreshold` | number, default `10` | Tint the balance below this amount; `0` disables (unused by the gradient style) |
+| `lowBalanceStyle` | `warn` (default) / `danger` / `gradient` | Amber, red, or a colour interpolated between two endpoints |
+| `gradientFromAmount` | number, default `0` | Gradient start: at or below this amount the balance takes `gradientFromColor` |
+| `gradientFromColor` | `#rrggbb`, default `#e5484d` | Low-balance end colour |
+| `gradientToAmount` | number, default `50` | Gradient end: at or above this amount the balance takes `gradientToColor`; the range in between is linear |
+| `gradientToColor` | `#rrggbb`, default `#22c55e` | Healthy-balance end colour |
+
+For example, "red at ¥0 fading to green at ¥50" is `lowBalanceStyle: gradient`
+with `gradientFromAmount: 0` / `gradientFromColor: '#e5484d'` /
+`gradientToAmount: 50` / `gradientToColor: '#22c55e'`. The settings form also
+offers colour pickers and a live gradient preview strip.
 
 If all three `show` flags are off, the balance is kept so the widget never
 renders empty. Restart the app after changing the config (the desktop build

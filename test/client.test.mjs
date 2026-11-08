@@ -225,6 +225,34 @@ test('low balance tints the balance segment with the configured tone', async () 
   assert.equal(caption.innerHTML.includes('data-tone="warn"'), true)
 })
 
+test('gradient style interpolates the balance colour between the two endpoints', async () => {
+  const gradient = (balance) => ({
+    balance: { status: 'ready', wallets: [{ currency: 'CNY', balance }], bonusWallets: [] },
+    display: {
+      lowBalanceStyle: 'gradient',
+      gradientFromAmount: 0,
+      gradientFromColor: '#000000',
+      gradientToAmount: 100,
+      gradientToColor: '#ffffff',
+    },
+  })
+
+  const middle = mount({}, gradient('50.00'), { captionBar: true })
+  await flush()
+  const caption = middle.dom.menubar.children.find((child) => child.className === 'dsh-cb')
+  assert.equal(caption.innerHTML.includes('style="color:#808080"'), true, 'halfway mixes the endpoints')
+
+  const low = mount({}, gradient('10.00'), { captionBar: true })
+  await flush()
+  const lowCaption = low.dom.menubar.children.find((child) => child.className === 'dsh-cb')
+  assert.equal(lowCaption.innerHTML.includes('style="color:#1a1a1a"'), true, 'below the start keeps the start colour')
+
+  const high = mount({}, gradient('120.00'), { captionBar: true })
+  await flush()
+  const highCaption = high.dom.menubar.children.find((child) => child.className === 'dsh-cb')
+  assert.equal(highCaption.innerHTML.includes('style="color:#ffffff"'), true, 'above the end keeps the end colour')
+})
+
 test('danger tone is honoured and hidden segments disappear', async () => {
   const { dom } = mount(
     {},

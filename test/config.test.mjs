@@ -48,7 +48,40 @@ test('display defaults keep every segment visible', () => {
     smallDecimals: true,
     lowBalanceThreshold: 10,
     lowBalanceStyle: 'warn',
+    gradientFromAmount: 0,
+    gradientFromColor: '#e5484d',
+    gradientToAmount: 50,
+    gradientToColor: '#22c55e',
   })
+})
+
+test('gradient style is kept and its range is validated', () => {
+  const display = normalizeDisplay({
+    lowBalanceStyle: 'gradient',
+    gradientFromAmount: 10,
+    gradientFromColor: '#ABCDEF',
+    gradientToAmount: 60,
+    gradientToColor: '#123456',
+  })
+  assert.equal(display.lowBalanceStyle, 'gradient')
+  assert.equal(display.gradientFromAmount, 10)
+  assert.equal(display.gradientToAmount, 60)
+  assert.equal(display.gradientFromColor, '#abcdef')
+  assert.equal(display.gradientToColor, '#123456')
+})
+
+test('gradient falls back to defaults for bad colours or an empty range', () => {
+  const display = normalizeDisplay({
+    lowBalanceStyle: 'gradient',
+    gradientFromAmount: 80,
+    gradientToAmount: 20,
+    gradientFromColor: 'red',
+    gradientToColor: '#12',
+  })
+  assert.equal(display.gradientFromAmount, 0)
+  assert.equal(display.gradientToAmount, 50)
+  assert.equal(display.gradientFromColor, '#e5484d')
+  assert.equal(display.gradientToColor, '#22c55e')
 })
 
 test('display rejects unknown positions and styles, and keeps one segment', () => {

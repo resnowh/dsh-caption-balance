@@ -13,7 +13,9 @@
 #   showBalance / showToday / showPhase  是否显示余额、今日花费、峰谷单字
 #   smallDecimals  小数部分是否小一号
 #   lowBalanceThreshold  余额低于该值时变色（0 关闭）
-#   lowBalanceStyle  warn（琥珀）| danger（红）
+#   lowBalanceStyle  warn（琥珀）| danger（红）| gradient（渐变）
+#   gradientFromAmount / gradientFromColor  渐变起点：余额不高于该值时用起点颜色
+#   gradientToAmount / gradientToColor      渐变终点：余额不低于该值时用终点颜色，中间线性过渡
 - insert:
     - id: dsh-caption-balance
       name: dsh-caption-balance
@@ -33,6 +35,10 @@
           smallDecimals: true
           lowBalanceThreshold: 10
           lowBalanceStyle: warn
+          gradientFromAmount: 0
+          gradientFromColor: '#e5484d'
+          gradientToAmount: 50
+          gradientToColor: '#22c55e'
         aliases:
           deepseek-v4-flash: deepseek-flash
           deepseek-v4-flash-vision-exp: deepseek-flash

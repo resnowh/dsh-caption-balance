@@ -41,7 +41,14 @@ window.__ModuleLoader__.load({
     const REFRESH_MS = 30_000
 
     const POSITIONS = new Set(['auto', 'caption', 'header', 'sidebar'])
-    const TONES = new Set(['warn', 'danger'])
+    const TONES = new Set(['warn', 'danger', 'gradient'])
+    const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+    const GRADIENT_DEFAULTS = Object.freeze({
+      fromAmount: 0,
+      fromColor: '#e5484d',
+      toAmount: 50,
+      toColor: '#22c55e',
+    })
 
     const captionCss = `
 button.dsh-cb {
@@ -101,6 +108,12 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
 .dsh-cb-settings__name { font-size: 14px; }
 .dsh-cb-settings__hint { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }
 .dsh-cb-settings select, .dsh-cb-settings input[type=number] { height: 32px; box-sizing: border-box; border: .5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); color: var(--dsw-alias-label-primary); font: inherit; padding: 0 10px; min-width: 150px; }
+.dsh-cb-settings input[type=color] { width: 44px; height: 32px; box-sizing: border-box; padding: 2px; border: .5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md); background: var(--dsw-alias-bg-layer-3); }
+.dsh-cb-settings__pair { display: flex; align-items: center; gap: 8px; }
+.dsh-cb-settings__pair input[type=number] { min-width: 90px; width: 90px; }
+.dsh-cb-settings__gradientRow { display: flex; flex-direction: column; gap: 4px; padding: 0 0 10px; }
+.dsh-cb-settings__gradient { height: 10px; border-radius: 999px; }
+.dsh-cb-settings__gradientLabels { display: flex; justify-content: space-between; color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .dsh-cb-settings input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--dsw-alias-brand-primary); }
 .dsh-cb-settings__actions { display: flex; align-items: center; gap: 12px; }
 .dsh-cb-settings__save { height: 32px; padding: 0 14px; border-radius: var(--dsw-radius-md); border: 0; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); font: inherit; font-weight: 500; cursor: pointer; }
@@ -127,6 +140,13 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         lowStyle: '低余额颜色',
         warn: '琥珀色',
         danger: '红色',
+        gradient: '渐变',
+        gradientFrom: '渐变起点',
+        gradientFromHint: '余额不高于该金额时显示起点颜色',
+        gradientTo: '渐变终点',
+        gradientToHint: '余额不低于该金额时显示终点颜色，中间按比例过渡',
+        amount: '金额',
+        colour: '颜色',
         save: '保存',
         saving: '保存中…',
         saved: '已保存',
@@ -147,6 +167,13 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         lowStyle: 'Low balance colour',
         warn: 'Amber',
         danger: 'Red',
+        gradient: 'Gradient',
+        gradientFrom: 'Gradient start',
+        gradientFromHint: 'At or below this amount the balance takes the start colour',
+        gradientTo: 'Gradient end',
+        gradientToHint: 'At or above this amount the balance takes the end colour; the range in between is interpolated',
+        amount: 'Amount',
+        colour: 'Colour',
         save: 'Save',
         saving: 'Saving…',
         saved: 'Saved',
@@ -163,6 +190,13 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
     /** Validate the display block the host shipped, so an old host still works. */
     function displayOf(data) {
       const source = data?.display !== null && typeof data?.display === 'object' ? data.display : {}
+      const gradientFromAmount = Number.isFinite(Number(source.gradientFromAmount))
+        ? Math.max(0, Number(source.gradientFromAmount))
+        : GRADIENT_DEFAULTS.fromAmount
+      const gradientToAmount = Number.isFinite(Number(source.gradientToAmount))
+        ? Math.max(0, Number(source.gradientToAmount))
+        : GRADIENT_DEFAULTS.toAmount
+      const gradientRange = gradientToAmount > gradientFromAmount
       return {
         position: POSITIONS.has(source.position) ? source.position : 'auto',
         showBalance: source.showBalance !== false,
@@ -173,6 +207,14 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
           ? Math.max(0, Number(source.lowBalanceThreshold))
           : 10,
         lowBalanceStyle: TONES.has(source.lowBalanceStyle) ? source.lowBalanceStyle : 'warn',
+        gradientFromAmount: gradientRange ? gradientFromAmount : GRADIENT_DEFAULTS.fromAmount,
+        gradientToAmount: gradientRange ? gradientToAmount : GRADIENT_DEFAULTS.toAmount,
+        gradientFromColor: HEX_COLOR.test(source.gradientFromColor)
+          ? String(source.gradientFromColor).toLowerCase()
+          : GRADIENT_DEFAULTS.fromColor,
+        gradientToColor: HEX_COLOR.test(source.gradientToColor)
+          ? String(source.gradientToColor).toLowerCase()
+          : GRADIENT_DEFAULTS.toColor,
       }
     }
 
@@ -289,13 +331,47 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       return seen ? total : null
     }
 
-    /** `warn` / `danger` when the balance sits below the configured threshold. */
-    function lowTone(data, display) {
-      if (!(display.lowBalanceThreshold > 0)) return null
+    /** Parse `#rrggbb` into its three channels. */
+    function hexChannels(hex) {
+      return [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16))
+    }
+
+    /** Linear RGB interpolation between two `#rrggbb` colours. */
+    function mixHex(from, to, ratio) {
+      const start = hexChannels(from)
+      const end = hexChannels(to)
+      const channels = start.map((value, index) => {
+        const mixed = Math.round(value + (end[index] - value) * ratio)
+        return Math.max(0, Math.min(255, mixed)).toString(16).padStart(2, '0')
+      })
+      return `#${channels.join('')}`
+    }
+
+    /**
+     * The balance tint: `{ tone }` for the warn/danger styles, or `{ color }`
+     * with an interpolated `#rrggbb` for the gradient style.
+     */
+    function lowBalanceState(data, display) {
       const currency = data?.pricing?.currency ?? 'CNY'
       const total = walletTotal(data?.balance, currency)
-      if (total === null || total >= display.lowBalanceThreshold) return null
-      return display.lowBalanceStyle === 'danger' ? 'danger' : 'warn'
+      if (total === null) return null
+      if (display.lowBalanceStyle === 'gradient') {
+        const fromAmount = display.gradientFromAmount
+        const toAmount = display.gradientToAmount
+        if (!(toAmount > fromAmount)) return null
+        if (total <= fromAmount) return { color: display.gradientFromColor }
+        if (total >= toAmount) return { color: display.gradientToColor }
+        return {
+          color: mixHex(
+            display.gradientFromColor,
+            display.gradientToColor,
+            (total - fromAmount) / (toAmount - fromAmount),
+          ),
+        }
+      }
+      if (!(display.lowBalanceThreshold > 0)) return null
+      if (total >= display.lowBalanceThreshold) return null
+      return { tone: display.lowBalanceStyle === 'danger' ? 'danger' : 'warn' }
     }
 
     function bonusText(balance, currency) {
@@ -338,11 +414,11 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       const currency = data?.pricing?.currency ?? 'CNY'
       const loading = data === null
       const failed = error !== null && data === null
-      const tone = error === null && data !== null ? lowTone(data, display) : null
+      const low = error === null && data !== null ? lowBalanceState(data, display) : null
 
       return {
         currency,
-        tone,
+        low,
         balance: display.showBalance
           ? (failed ? '—' : loading ? '…' : walletMarkup(data.balance, currency, display.smallDecimals))
           : '',
@@ -355,10 +431,16 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
     function paintCaption(button, state, display) {
       if (button === null) return
       const view = segmentsOf(state.data, state.error, display)
-      const tone = view.tone
+      const low = view.low
       const parts = []
       if (view.balance !== '') {
-        parts.push(`<span class="dsh-cb-balance${tone === null ? '' : ' dsh-cb-low'}"${tone === null ? '' : ` data-tone="${tone}"`}>${view.balance}</span>`)
+        const lowClass = low === null ? '' : ' dsh-cb-low'
+        const lowAttribute = low === null
+          ? ''
+          : low.color === undefined
+            ? ` data-tone="${low.tone}"`
+            : ` style="color:${low.color}"`
+        parts.push(`<span class="dsh-cb-balance${lowClass}"${lowAttribute}>${view.balance}</span>`)
       }
       if (view.cost !== '') {
         if (parts.length > 0) parts.push('<span class="dsh-cb-sep">·</span>')
@@ -476,7 +558,14 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       const view = segmentsOf(state.data, state.error, display)
 
       const children = []
-      if (view.balance !== '') children.push(h('span', { className: `dsh-cb-balance${view.tone ? ' dsh-cb-low' : ''}`, 'data-tone': view.tone ?? undefined, key: 'balance' }, view.balance))
+      if (view.balance !== '') {
+        const lowProps = view.low === null
+          ? {}
+          : view.low.color === undefined
+            ? { 'data-tone': view.low.tone }
+            : { style: { color: view.low.color } }
+        children.push(h('span', { className: `dsh-cb-balance${view.low === null ? '' : ' dsh-cb-low'}`, key: 'balance', ...lowProps }, view.balance))
+      }
       if (view.cost !== '') {
         if (children.length > 0) children.push(h('span', { className: 'dsh-cb-sep', key: 'sep' }, '·'))
         children.push(h('span', { className: 'dsh-cb-cost', key: 'cost' }, view.cost))
@@ -522,7 +611,14 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
       const view = segmentsOf(state.data, state.error, display)
 
       const children = []
-      if (view.balance !== '') children.push(h('span', { className: `dsh-cb-balance${view.tone ? ' dsh-cb-low' : ''}`, 'data-tone': view.tone ?? undefined, key: 'balance' }, view.balance))
+      if (view.balance !== '') {
+        const lowProps = view.low === null
+          ? {}
+          : view.low.color === undefined
+            ? { 'data-tone': view.low.tone }
+            : { style: { color: view.low.color } }
+        children.push(h('span', { className: `dsh-cb-balance${view.low === null ? '' : ' dsh-cb-low'}`, key: 'balance', ...lowProps }, view.balance))
+      }
       if (view.cost !== '') {
         if (children.length > 0) children.push(h('span', { className: 'dsh-cb-sep', key: 'sep' }, '·'))
         children.push(h('span', { className: 'dsh-cb-cost', key: 'cost' }, view.cost))
@@ -653,18 +749,20 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
           h(Row, { name: text.showToday }, h(Toggle, { name: text.showToday, checked: draft.showToday, onChange: (value) => update({ showToday: value }) })),
           h(Row, { name: text.showPhase }, h(Toggle, { name: text.showPhase, checked: draft.showPhase, onChange: (value) => update({ showPhase: value }) })),
           h(Row, { name: text.smallDecimals }, h(Toggle, { name: text.smallDecimals, checked: draft.smallDecimals, onChange: (value) => update({ smallDecimals: value }) })),
-          h(
-            Row,
-            { name: text.lowThreshold, hint: text.lowThresholdHint },
-            h('input', {
-              type: 'number',
-              min: 0,
-              step: 1,
-              value: String(draft.lowBalanceThreshold),
-              onChange: (event) => update({ lowBalanceThreshold: Math.max(0, Number(event.target.value) || 0) }),
-              'aria-label': text.lowThreshold,
-            }),
-          ),
+          draft.lowBalanceStyle === 'gradient'
+            ? null
+            : h(
+                Row,
+                { name: text.lowThreshold, hint: text.lowThresholdHint },
+                h('input', {
+                  type: 'number',
+                  min: 0,
+                  step: 1,
+                  value: String(draft.lowBalanceThreshold),
+                  onChange: (event) => update({ lowBalanceThreshold: Math.max(0, Number(event.target.value) || 0) }),
+                  'aria-label': text.lowThreshold,
+                }),
+              ),
           h(
             Row,
             { name: text.lowStyle },
@@ -677,8 +775,75 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
               },
               h('option', { value: 'warn' }, text.warn),
               h('option', { value: 'danger' }, text.danger),
+              h('option', { value: 'gradient' }, text.gradient),
             ),
           ),
+          draft.lowBalanceStyle === 'gradient'
+            ? h(
+                Row,
+                { name: text.gradientFrom, hint: text.gradientFromHint },
+                h(
+                  'div',
+                  { className: 'dsh-cb-settings__pair' },
+                  h('input', {
+                    type: 'number',
+                    min: 0,
+                    step: 1,
+                    value: String(draft.gradientFromAmount),
+                    onChange: (event) => update({ gradientFromAmount: Math.max(0, Number(event.target.value) || 0) }),
+                    'aria-label': `${text.gradientFrom} ${text.amount}`,
+                  }),
+                  h('input', {
+                    type: 'color',
+                    value: draft.gradientFromColor,
+                    onChange: (event) => update({ gradientFromColor: String(event.target.value).toLowerCase() }),
+                    'aria-label': `${text.gradientFrom} ${text.colour}`,
+                  }),
+                ),
+              )
+            : null,
+          draft.lowBalanceStyle === 'gradient'
+            ? h(
+                Row,
+                { name: text.gradientTo, hint: text.gradientToHint },
+                h(
+                  'div',
+                  { className: 'dsh-cb-settings__pair' },
+                  h('input', {
+                    type: 'number',
+                    min: 0,
+                    step: 1,
+                    value: String(draft.gradientToAmount),
+                    onChange: (event) => update({ gradientToAmount: Math.max(0, Number(event.target.value) || 0) }),
+                    'aria-label': `${text.gradientTo} ${text.amount}`,
+                  }),
+                  h('input', {
+                    type: 'color',
+                    value: draft.gradientToColor,
+                    onChange: (event) => update({ gradientToColor: String(event.target.value).toLowerCase() }),
+                    'aria-label': `${text.gradientTo} ${text.colour}`,
+                  }),
+                ),
+              )
+            : null,
+          draft.lowBalanceStyle === 'gradient'
+            ? h(
+                'div',
+                { className: 'dsh-cb-settings__gradientRow' },
+                h('div', {
+                  className: 'dsh-cb-settings__gradient',
+                  style: {
+                    background: `linear-gradient(90deg, ${draft.gradientFromColor}, ${draft.gradientToColor})`,
+                  },
+                }),
+                h(
+                  'div',
+                  { className: 'dsh-cb-settings__gradientLabels' },
+                  h('span', {}, String(draft.gradientFromAmount)),
+                  h('span', {}, String(draft.gradientToAmount)),
+                ),
+              )
+            : null,
         ),
         h(
           'div',
