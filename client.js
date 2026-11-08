@@ -426,7 +426,9 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
     }
 
     function ensureStyle(id, css, parent) {
-      if (parent.getElementById(id) !== null) return
+      // parent may be a ShadowRoot or a plain element such as document.head;
+      // only Document has getElementById, so every case goes through querySelector.
+      if (parent.querySelector('#' + id) !== null) return
       const style = document.createElement('style')
       style.id = id
       style.textContent = css

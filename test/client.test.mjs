@@ -241,11 +241,25 @@ test('danger tone is honoured and hidden segments disappear', async () => {
   assert.equal(caption.innerHTML.includes('dsh-cb-phase'), false)
 })
 test('registers a settings section independent of the render target', async () => {
-  const { injected, cleanup } = mount({}, { display: { position: 'sidebar' } })
+  const { dom, injected, cleanup } = mount({}, { display: { position: 'sidebar' } })
   await flush()
   const section = injected.find((entry) => entry.name === 'settings.section')
   assert.notEqual(section, undefined, 'settings page is contributed')
   assert.equal(section.descriptor.id, 'dsh-caption-balance')
   assert.equal(typeof section.descriptor.label, 'function')
+  // document.head is an element, not a Document: the old getElementById check
+  // threw here and the section was never registered.
+  const style = dom.document.head.children.find((child) => child.id === 'dsh-caption-balance-settings-style')
+  assert.notEqual(style, undefined, 'settings stylesheet lands in document.head')
   cleanup()
+})
+
+test('header and sidebar targets inject their stylesheet into document.head', async () => {
+  for (const position of ['header', 'sidebar']) {
+    const { dom, cleanup } = mount({}, { display: { position } })
+    await flush()
+    const style = dom.document.head.children.find((child) => child.id === 'dsh-caption-balance-chip-style')
+    assert.notEqual(style, undefined, position + ' stylesheet is injected')
+    cleanup()
+  }
 })
