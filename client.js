@@ -703,25 +703,38 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
 
         // The settings page is independent of the render target, so it is
         // registered up front and appears in the settings dialog's navigation.
-        ensureStyle(SETTINGS_STYLE_ID, settingsCss, document.head)
-        try {
-          ctx.slots.inject(
-            SETTINGS_SLOT,
-            () =>
-              ctx.slots.register(
-                {
-                  name: SETTINGS_SLOT,
-                  id: 'dsh-caption-balance',
-                  order: 60,
-                  label: () => copy().nav,
-                },
-                SettingsSection,
-              ),
-            'dsh-caption-balance: settings section',
-          )
-        } catch (error) {
-          ctx?.logger?.warn?.(`[dsh-caption-balance] settings section unavailable: ${error?.message ?? error}`)
+        // The slot may not be declared this early in a cold web boot, so a
+        // failed attempt is logged and retried instead of failing the whole
+        // client entry.
+        let settingsRegistered = false
+        let settingsAttempts = 0
+        let settingsTimer = 0
+        const registerSettingsSection = () => {
+          if (disposed || settingsRegistered) return
+          settingsAttempts += 1
+          try {
+            ensureStyle(SETTINGS_STYLE_ID, settingsCss, document.head)
+            ctx.slots.inject(
+              SETTINGS_SLOT,
+              () =>
+                ctx.slots.register(
+                  {
+                    name: SETTINGS_SLOT,
+                    id: 'dsh-caption-balance',
+                    order: 60,
+                    label: () => copy().nav,
+                  },
+                  SettingsSection,
+                ),
+              'dsh-caption-balance: settings section',
+            )
+            settingsRegistered = true
+          } catch (error) {
+            console.error('[dsh-caption-balance] settings section unavailable', error)
+            if (settingsAttempts < 20) settingsTimer = window.setTimeout(registerSettingsSection, 1000)
+          }
         }
+        registerSettingsSection()
 
         const registerSlot = (name, component) => {
           if (registered) return
@@ -786,12 +799,15 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
           if (document.visibilityState === 'visible') poller.refresh(false)
         }
         document.addEventListener('visibilitychange', onVisible)
-        boot()
+        boot().catch((error) => {
+          console.error('[dsh-caption-balance] client boot failed', error)
+        })
 
         return () => {
           disposed = true
           window.clearInterval(mountTimer)
           window.clearTimeout(fallbackTimer)
+          window.clearTimeout(settingsTimer)
           window.clearInterval(refreshTimer)
           document.removeEventListener('visibilitychange', onVisible)
           captionUnsubscribe?.()

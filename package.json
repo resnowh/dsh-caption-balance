@@ -1,6 +1,6 @@
 {
   "name": "dsh-caption-balance",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "在 DeepSeek Harness 桌面端标题栏（应用/编辑 菜单旁）显示账号余额、今日花费与峰谷时段",
   "type": "module",
   "license": "MIT",
