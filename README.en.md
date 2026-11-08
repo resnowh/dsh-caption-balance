@@ -24,7 +24,8 @@ A one-line account reading for the DeepSeek Harness UI, placed in the
   09:00–12:00 and 14:00–18:00, ×2) or `谷` (off-peak, half price); the peak
   character turns amber
 - **Low-balance tint** — below a configurable threshold the balance switches to
-  amber or red
+  amber or red; a gradient style can also fade it from one colour to another
+  between two amounts
 - **Hover for details** — balance, bonus wallets, today/month tokens and cost,
   current window, update time
 - **Click to refresh**, otherwise refreshes every 30 seconds
@@ -36,11 +37,34 @@ A one-line account reading for the DeepSeek Harness UI, placed in the
 
 Requires **DeepSeek Harness** `0.2.2-rc.1` or newer.
 
+**Option 1: the Plugins page (GUI)**
+
+Open **Plugins → Add plugin** (or *Install a third-party plugin* from its
+dropdown) and paste the repository URL:
+
+```
+https://github.com/resnowh/dsh-caption-balance
+```
+
+Press *Enable now* after the install finishes, then restart the app.
+
+**Option 2: the CLI**
+
 ```sh
 dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
 ```
 
-Restart the app to pick it up.
+Replace `--profile` with the profile you install into (the desktop app uses
+`desktop`).
+
+**Option 3: a local directory** (for development)
+
+```sh
+git clone https://github.com/resnowh/dsh-caption-balance.git
+dsh plugin --profile desktop add /path/to/dsh-caption-balance
+```
+
+Restart the app to pick it up (the desktop build has no page-reload shortcut).
 
 ## Configuration
 
