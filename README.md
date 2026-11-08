@@ -107,7 +107,7 @@ dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
 切换位置、各段显示、小数样式、低余额阈值与颜色后点保存立即生效，不需要改 YAML、也不用重启。
 
 - 设置页写入的是**用户覆盖**，保存在 `~/.dsh/plugin-data/dsh-caption-balance/settings.json`，优先于 profile 里的默认值
-- 想回到默认值：把各项改回原值保存，或删除上面那个文件
+- 想回到默认值：点表单里的 **「恢复默认」** 一键把表单填回部署默认值并立即保存（等价于删除上面那个文件）
 
 ## 工作原理
 

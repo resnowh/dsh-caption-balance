@@ -118,6 +118,8 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
 .dsh-cb-settings__actions { display: flex; align-items: center; gap: 12px; }
 .dsh-cb-settings__save { height: 32px; padding: 0 14px; border-radius: var(--dsw-radius-md); border: 0; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); font: inherit; font-weight: 500; cursor: pointer; }
 .dsh-cb-settings__save:disabled { opacity: .6; cursor: default; }
+.dsh-cb-settings__reset { height: 32px; padding: 0 14px; border-radius: var(--dsw-radius-md); border: .5px solid var(--dsw-alias-border-l4); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; cursor: pointer; }
+.dsh-cb-settings__reset:disabled { opacity: .6; cursor: default; }
 .dsh-cb-settings__status { color: var(--dsw-alias-label-tertiary); font-size: 12px; }
 .dsh-cb-settings__status[data-tone=error] { color: var(--dsw-alias-state-error-primary); }
 `
@@ -151,6 +153,8 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         saving: '保存中…',
         saved: '已保存',
         failed: '保存失败',
+        reset: '恢复默认',
+        restored: '已恢复默认',
         loading: '读取中…',
       },
       en: {
@@ -178,6 +182,8 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         saving: 'Saving…',
         saved: 'Saved',
         failed: 'Save failed',
+        reset: 'Reset to defaults',
+        restored: 'Defaults restored',
         loading: 'Loading…',
       },
     }
@@ -675,6 +681,7 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
     function SettingsSection() {
       const text = copy()
       const [draft, setDraft] = React.useState(null)
+      const [defaults, setDefaults] = React.useState(null)
       const [status, setStatus] = React.useState('loading')
       const [error, setError] = React.useState(null)
 
@@ -684,11 +691,13 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
           .then((payload) => {
             if (!live) return
             setDraft(displayOf(payload))
+            setDefaults(displayOf({ display: payload?.defaults }))
             setStatus('ready')
           })
           .catch((cause) => {
             if (!live) return
             setDraft(displayOf(null))
+            setDefaults(displayOf(null))
             setStatus('ready')
             setError(String(cause?.message ?? cause))
           })
@@ -708,6 +717,26 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
             setDraft(displayOf(payload))
             setStatus('saved')
             // Repaint the mounted widget right away instead of waiting for its poll.
+            poller?.refresh(false)
+          })
+          .catch((cause) => {
+            setStatus('ready')
+            setError(String(cause?.message ?? cause))
+          })
+      }
+
+      // Restore the deployment defaults in one click: fill the form and persist
+      // them, so the widget and every other entrance see the same values.
+      const restore = () => {
+        if (status === 'saving') return
+        const base = defaults ?? displayOf(null)
+        setDraft(base)
+        setStatus('saving')
+        setError(null)
+        saveSettings(base)
+          .then((payload) => {
+            setDraft(displayOf(payload))
+            setStatus('restored')
             poller?.refresh(false)
           })
           .catch((cause) => {
@@ -853,7 +882,13 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
             { type: 'button', className: 'dsh-cb-settings__save', onClick: save, disabled: status === 'saving' },
             status === 'saving' ? text.saving : text.save,
           ),
+          h(
+            'button',
+            { type: 'button', className: 'dsh-cb-settings__reset', onClick: restore, disabled: status === 'saving' },
+            text.reset,
+          ),
           status === 'saved' ? h('span', { className: 'dsh-cb-settings__status' }, text.saved) : null,
+          status === 'restored' ? h('span', { className: 'dsh-cb-settings__status' }, text.restored) : null,
           error === null ? null : h('span', { className: 'dsh-cb-settings__status', 'data-tone': 'error' }, `${text.failed}: ${error}`),
         ),
       )

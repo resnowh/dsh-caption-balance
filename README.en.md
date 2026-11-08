@@ -126,7 +126,9 @@ no restart.
 - The page writes **user overrides** to
   `~/.dsh/plugin-data/dsh-caption-balance/settings.json`, which win over the
   profile defaults
-- To go back to the defaults, set the values back or delete that file
+- To go back to the defaults, press **Reset to defaults** in the form: it fills
+  the form with the deployment defaults and saves them at once, which is the
+  same as deleting that file
 
 ## How it works
 
