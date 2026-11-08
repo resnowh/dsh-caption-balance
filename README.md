@@ -32,7 +32,7 @@
 dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
 ```
 
-安装后重启应用，并刷新页面（`Ctrl+Shift+R`）。
+安装后重启应用即可生效（桌面版没有刷新页面快捷键）。
 
 > 需要 `dsh.bundle.patch` 才能被 `dsh plugin add` 识别；本包已声明。
 
@@ -85,11 +85,16 @@ dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
 | `lowBalanceThreshold` | 数字，默认 `10` | 余额低于该值时变色；`0` 关闭 |
 | `lowBalanceStyle` | `warn`（默认）/ `danger` | `warn` 琥珀、`danger` 红色 |
 
-三个 `show` 开关全关时会自动保留余额，避免出现空控件。改完配置刷新页面（`Ctrl+Shift+R`）即可生效。
+三个 `show` 开关全关时会自动保留余额，避免出现空控件。改完配置后重启应用即可生效（桌面版没有刷新页面快捷键）。
 
 ### 在设置里改
 
-打开 Harness 的**设置 → 余额显示**，可以直接切换位置、各段显示、小数样式、低余额阈值与颜色，点保存立即生效，不需要改 YAML、也不用重启。
+设置面板和**插件页**都能改，两处是同一个表单、写同一份配置：
+
+- **设置 → 余额显示**：左侧导航里的独立一页
+- **插件页 → 余额显示 → 配置区**：打开本插件的卡片，说明和行列表之间就是同一套开关
+
+切换位置、各段显示、小数样式、低余额阈值与颜色后点保存立即生效，不需要改 YAML、也不用重启。
 
 - 设置页写入的是**用户覆盖**，保存在 `~/.dsh/plugin-data/dsh-caption-balance/settings.json`，优先于 profile 里的默认值
 - 想回到默认值：把各项改回原值保存，或删除上面那个文件

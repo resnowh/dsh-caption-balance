@@ -254,6 +254,16 @@ test('registers a settings section independent of the render target', async () =
   cleanup()
 })
 
+test('contributes the display form to the plugins page bundle config', async () => {
+  const { injected, cleanup } = mount({}, { display: { position: 'auto' } })
+  await flush()
+  const entry = injected.find((candidate) => candidate.name === 'plugins.bundle.config')
+  assert.notEqual(entry, undefined, 'plugins page bundle config is contributed')
+  assert.equal(entry.descriptor.key, 'dsh-caption-balance')
+  assert.equal(typeof entry.component, 'function')
+  cleanup()
+})
+
 test('header and sidebar targets inject their stylesheet into document.head', async () => {
   for (const position of ['header', 'sidebar']) {
     const { dom, cleanup } = mount({}, { display: { position } })

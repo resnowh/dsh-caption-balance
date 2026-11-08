@@ -34,6 +34,8 @@ window.__ModuleLoader__.load({
     const HEADER_SLOT = 'conversation.session.header.utilities'
     const SIDEBAR_SLOT = 'sidebar.footer.action'
     const SETTINGS_SLOT = 'settings.section'
+    const PLUGINS_BUNDLE_CONFIG = 'plugins.bundle.config'
+    const BUNDLE_NAME = 'dsh-caption-balance'
     const MOUNT_INTERVAL_MS = 500
     const FALLBACK_DELAY_MS = 4_000
     const REFRESH_MS = 30_000
@@ -738,6 +740,35 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
         }
         registerSettingsSection()
 
+        // A bundle's own configuration belongs on the Plugins page: the page
+        // renders `plugins.bundle.config` keyed by the bundle package name
+        // between the bundle description and its rows. Contribute the same
+        // form there so the switches are reachable from the plugin card.
+        let pluginsConfigRegistered = false
+        let pluginsConfigAttempts = 0
+        let pluginsConfigTimer = 0
+        const registerPluginsConfig = () => {
+          if (disposed || pluginsConfigRegistered) return
+          pluginsConfigAttempts += 1
+          try {
+            ensureStyle(SETTINGS_STYLE_ID, settingsCss, document.head)
+            ctx.slots.inject(
+              PLUGINS_BUNDLE_CONFIG,
+              () =>
+                ctx.slots.register(
+                  { name: PLUGINS_BUNDLE_CONFIG, key: BUNDLE_NAME, order: 20 },
+                  SettingsSection,
+                ),
+              'dsh-caption-balance: plugins config',
+            )
+            pluginsConfigRegistered = true
+          } catch (error) {
+            console.error('[dsh-caption-balance] plugins config unavailable', error)
+            if (pluginsConfigAttempts < 20) pluginsConfigTimer = window.setTimeout(registerPluginsConfig, 1000)
+          }
+        }
+        registerPluginsConfig()
+
         const registerSlot = (name, component) => {
           if (registered) return
           registered = true
@@ -810,6 +841,7 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
           window.clearInterval(mountTimer)
           window.clearTimeout(fallbackTimer)
           window.clearTimeout(settingsTimer)
+          window.clearTimeout(pluginsConfigTimer)
           window.clearInterval(refreshTimer)
           document.removeEventListener('visibilitychange', onVisible)
           captionUnsubscribe?.()

@@ -40,7 +40,7 @@ Requires **DeepSeek Harness** `0.2.2-rc.1` or newer.
 dsh plugin --profile desktop add github:resnowh/dsh-caption-balance
 ```
 
-Restart the app and reload the page (`Ctrl+Shift+R`).
+Restart the app to pick it up.
 
 ## Configuration
 
@@ -95,13 +95,20 @@ low balance is highlighted:
 | `lowBalanceStyle` | `warn` (default) / `danger` | Amber or red |
 
 If all three `show` flags are off, the balance is kept so the widget never
-renders empty. Reload the page (`Ctrl+Shift+R`) after changing the config.
+renders empty. Restart the app after changing the config (the desktop build
+has no page-reload shortcut).
 
-### From the settings dialog
+### From the settings dialog or the Plugins page
 
-Open **Settings → Balance display** in Harness to switch the position, the
-segments, the decimal style, the low-balance threshold and colour. Saving
-applies immediately — no YAML edit, no restart.
+The same form is reachable from two places, both writing one configuration:
+
+- **Settings → Balance display** — its own page in the settings navigation
+- **Plugins → Balance display → configuration** — open the plugin card; the
+  form sits between the description and the bundle rows
+
+Switch the position, the segments, the decimal style, the low-balance
+threshold and colour, then press Save: it applies immediately — no YAML edit,
+no restart.
 
 - The page writes **user overrides** to
   `~/.dsh/plugin-data/dsh-caption-balance/settings.json`, which win over the
