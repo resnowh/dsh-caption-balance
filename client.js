@@ -228,11 +228,9 @@ button.dsh-cb .dsh-cb-low[data-tone='danger'] { color: var(--dsw-alias-state-dan
     function splitMoney(currency, value) {
       const number = Number(value)
       if (!Number.isFinite(number)) return null
-      const absolute = Math.abs(number)
-      // Money keeps a fixed number of decimals so the caption never jitters
-      // between ¥59.6 and ¥59.60 as the value changes.
-      const decimals = absolute < 0.01 ? 4 : absolute < 1 ? 3 : 2
-      const text = number.toFixed(decimals)
+      // Money always shows exactly two decimals: the caption must not change
+      // width as amounts drift, and anything past 0.01 is noise at this scale.
+      const text = number.toFixed(2)
       const dot = text.indexOf('.')
       return dot < 0
         ? { symbol: currencySymbol(currency), integer: text, decimal: '' }
